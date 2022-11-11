@@ -1,0 +1,2170 @@
+<!doctype html><html class=theme-light lang=en><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><meta name=description content="x86 Assembly Language Programming"><meta name=keywords content><meta name=copyright content="1995-2021 The FreeBSD Foundation"><link rel=canonical href=https://docs.freebsd.org/en/books/developers-handbook/x86/><title>Chapter 11. x86 Assembly Language Programming | FreeBSD Documentation Portal</title><meta name=theme-color content="#790000"><meta name=color-scheme content="light dark high-contrast"><link rel="shortcut icon" href=https://docs.freebsd.org/favicon.ico><link rel=stylesheet href=https://docs.freebsd.org/styles/main.min.css><link rel=stylesheet href=https://docs.freebsd.org/css/font-awesome-min.css><script defer src=/js/theme-chooser.min.js></script>
+<script defer src=/js/copy-clipboard.min.js></script>
+<script defer src=/js/search.min.js></script><meta name=twitter:card content="summary"><meta name=twitter:domain content="docs.FreeBSD.org"><meta name=twitter:site content="@freebsd"><meta name=twitter:url content="https://twitter.com/freebsd"><meta property="og:title" content="Chapter 11. x86 Assembly Language Programming"><meta property="og:description" content="x86 Assembly Language Programming"><meta property="og:type" content="website"><meta property="og:image" content="https://docs.freebsd.org/favicon.ico"><meta property="og:image:alt" content="FreeBSD Logo"><meta property="og:locale" content="en"><meta property="og:url" content="https://docs.freebsd.org/en/books/developers-handbook/x86/"><meta property="og:site_name" content="FreeBSD Documentation Portal"><script type=application/ld+json>{"@context":"http://schema.org","@type":"Article","url":"https:\/\/docs.freebsd.org\/en\/books\/developers-handbook\/x86\/","name":"FreeBSD Documentation Portal","headline":"FreeBSD Documentation Portal","description":"FreeBSD Documentation Portal"}</script></head><body>
+
+<input type=checkbox class="hidden toggle" id=menu-control><main class=main-wrapper-book>
+
+<div class=book><h1 class=title>第十一章 x86汇编语言程序设计</h1><div class=book-content><div id=preamble><div class=sectionbody><div class=paragraph><p><em>本章由G. Adam Stanislav <a href=mailto:adam@redprince.net>adam@redprince.net</a>> 编写。</em></p></div></div></div><div class=sect1><h2 id=x86-intro>A.1. 简介<a class=anchor href=#x86-intro></a></h2><div class=sectionbody><div class=paragraph><p>UNIX®下的汇编语言编程是高度无文档的。通常认为没有人会想要使用它，因为各种UNIX®系统运行在不同的微处理器上，所以为了可移植性，所有东西都应该用C编写。</p></div><div class=paragraph><p>实际上，C的可移植性是一个神话。即使是C程序，当从一个UNIX®移植到另一个UNIX®时，也需要修改，不管每个程序运行在什么处理器上。通常，这样的程序充满了条件语句，这取决于它所编译的系统。</p></div><div class=paragraph><p>即使我们相信所有UNIX®软件都应该用C语言或其他高级语言编写，我们仍然需要汇编语言程序员:还有谁会编写访问内核的C库部分呢?</p></div><div class=paragraph><p>在本章中，我将尝试向您展示如何使用汇编语言编写UNIX®程序，特别是在FreeBSD下。</p></div><div class=paragraph><p>本章不解释汇编语言的基础知识。关于这方面有足够的资源(关于完整的汇编语言在线课程，请参阅Randall Hyde的 <a href=http://webster.cs.ucr.edu/>Art of Assembly Language</a>;如果你更喜欢纸质书，可以看看Jeff Duntemann的 Assembly Language Step-by-Step (ISBN: 0471375233)。然而，一旦本章结束，任何汇编语言程序员都能够快速有效地为FreeBSD编写程序。</p></div><div class=paragraph><p>版权所有®2000-2001 G. Adam Stanislav。保留所有权利。</p></div></div></div><div class=sect1><h2 id=x86-the-tools>A.2. 工具<a class=anchor href=#x86-the-tools></a></h2><div class=sectionbody><div class=sect2><h3 id=x86-the-assembler>A.2.1. 汇编<a class=anchor href=#x86-the-assembler></a></h3><div class=paragraph><p>汇编语言编程最重要的工具是汇编程序，它是一种将汇编语言代码转换为机器语言的软件。</p></div><div class=paragraph><p>FreeBSD有两个非常不同的汇编程序。一种是 <a href="https://www.freebsd.org/cgi/man.cgi?query=as&sektion=1&format=html">as(1)</a>，它使用传统的UNIX®汇编语言语法。这是系统自带的。</p></div><div class=paragraph><p>另一个是/usr/ports/dev /nasm.它使用Intel语法。它的主要优点是可以为许多操作系统组装代码。它需要单独安装，但完全免费。</p></div><div class=paragraph><p>本章使用nasm语法，因为大多数从其他操作系统来到FreeBSD的汇编语言程序员会发现它更容易理解。而且，坦白说，这是我习惯的。</p></div></div><div class=sect2><h3 id=x86-the-linker>A.2.2. 链接器<a class=anchor href=#x86-the-linker></a></h3><div class=paragraph><p>与任何编译器的输出一样，汇编器的输出需要被链接以形成可执行文件。</p></div><div class=paragraph><p>标准的 <a href="https://www.freebsd.org/cgi/man.cgi?query=ld&sektion=1&format=html">ld(1)</a> 连接器随FreeBSD一起提供。它与用任意一个汇编程序组装的代码一起工作。</p></div></div></div></div><div class=sect1><h2 id=x86-system-calls>A.3. 系统调用<a class=anchor href=#x86-system-calls></a></h2><div class=sectionbody><div class=sect2><h3 id=x86-default-calling-convention>A.3.1. 默认的调用协定<a class=anchor href=#x86-default-calling-convention></a></h3><div class=paragraph><p>默认情况下，FreeBSD内核使用C调用约定。此外，尽管使用 <code>int 80h</code> 访问内核，但假定程序将调用一个函数来发出 <code>int 80h</code> ，而不是直接发出 <code>int 80h</code> 。</p></div><div class=paragraph><p>这种约定非常方便，而且比MS-DOS®使用的Microsoft®约定更优越。为什么?因为UNIX®约定允许用任何语言编写的任何程序访问内核。</p></div><div class=paragraph><p>汇编语言程序也可以做到这一点。例如，我们可以打开一个文件:</p></div><div class="literalblock programlisting"><div class=content><pre>kernel:
+	int	80h	; Call kernel
+	ret
+
+open:
+	push	dword mode
+	push	dword flags
+	push	dword path
+	mov	eax, 5
+	call	kernel
+	add	esp, byte 12
+	ret</pre></div></div><div class=paragraph><p>这是一种非常干净和可移植的编码方式。如果您需要将代码移植到使用不同中断或传递参数的不同方式的UNIX系统中，您所需要更改的只是内核过程。</p></div><div class=paragraph><p>但是汇编语言程序员喜欢减少循环。上面的例子需要 <code>call/ret</code> 组合。我们可以通过 <code>push</code> 一个额外的 dword 来消除它:</p></div><div class="literalblock programlisting"><div class=content><pre>open:
+	push	dword mode
+	push	dword flags
+	push	dword path
+	mov	eax, 5
+	push	eax		; Or any other dword
+	int	80h
+	add	esp, byte 16</pre></div></div><div class=paragraph><p>我们在 <code>EAX</code> 中放置的 <code>5</code> 标识内核函数，在本例中是 <code>open</code> 。</p></div></div><div class=sect2><h3 id=x86-alternate-calling-convention>A.3.2. 交替调用协定<a class=anchor href=#x86-alternate-calling-convention></a></h3><div class=paragraph><p>FreeBSD是一个非常灵活的系统。它提供了调用内核的其他方法。但是，要使它工作，系统必须安装Linux仿真。</p></div><div class=paragraph><p>Linux是一个类似UNIX®的系统。但是，它的内核使用了与MS-DOS®相同的在寄存器中传递参数的系统调用约定。与UNIX®约定一样，函数号放在 <code>EAX</code> 中。然而，参数不是在堆栈上传递，而是在 <code>EBX, ECX, EDX, ESI, EDI, EBP</code> 中传递:</p></div><div class="literalblock programlisting"><div class=content><pre>open:
+	mov	eax, 5
+	mov	ebx, path
+	mov	ecx, flags
+	mov	edx, mode
+	int	80h</pre></div></div><div class=paragraph><p>这种约定与UNIX®方式相比有很大的缺点，至少就汇编语言编程而言:每次调用内核时，必须先 <code>push</code> 寄存器，然后再 <code>pop</code> 它们。这会使您的代码更大、更慢。然而，FreeBSD为您提供了一个选择。</p></div><div class=paragraph><p>如果选择Linux约定，则必须让系统知道它。在你的程序被组装和链接之后，你需要给可执行文件打上烙印:</p></div><div class=listingblock><div class=content><pre class="rouge highlight"><code data-lang=shell>% brandelf <span class=nt>-t</span> Linux filename</code></pre></div></div></div><div class=sect2><h3 id=x86-use-geneva>A.3.3. 应该使用哪种约定?<a class=anchor href=#x86-use-geneva></a></h3><div class=paragraph><p>如果您专门为FreeBSD编写代码，您应该始终使用UNIX®约定:它更快，您可以在寄存器中存储全局变量，您不必为可执行文件添加品牌，并且您不必强制在目标系统上安装Linux仿真包。</p></div><div class=paragraph><p>如果您希望创建也可以在Linux上运行的可移植代码，您可能仍然希望为FreeBSD用户提供尽可能高效的代码。在我解释了基本原理之后，我将向您展示如何实现这一点。</p></div></div><div class=sect2><h3 id=x86-call-numbers>A.3.4. 调用编号<a class=anchor href=#x86-call-numbers></a></h3><div class=paragraph><p>要告诉内核正在调用哪个系统服务，请将其编号放在 <code>EAX</code> 中。当然，你需要知道这个数字是多少。</p></div><div class=sect3><h4 id=x86-the-syscalls-file>A.3.4.1. <span class=filename>syscalls</span> 文件<a class=anchor href=#x86-the-syscalls-file></a></h4><div class=paragraph><p>这些号码在 <span class=filename>syscalls</span> 中列出。
+<code>locate syscalls</code> 可以找到几种不同格式的该文件，所有文件都是从 <span class=filename>syscalls.master</span> 自动生成的。</p></div><div class=paragraph><p>您可以在 <span class=filename>/usr/src/sys/kern/syscalls.master</span>中找到默认UNIX®调用约定的主文件。如果需要使用Linux模拟模式中实现的其他约定，请读取 <span class=filename>/usr/src/sys/i386/linux/syscalls.master</span>。</p></div><div class="admonitionblock note"><table><tbody><tr><td class=icon><i class="fa icon-note" title=Note></i></td><td class=content><div class=paragraph><p>FreeBSD和Linux不仅使用不同的调用约定，有时它们对相同的函数使用不同的编号。</p></div></td></tr></tbody></table></div><div class=paragraph><p><span class=filename>syscalls.master</span> 描述了如何调用:</p></div><div class="literalblock programlisting"><div class=content><pre>0	STD	NOHIDE	{ int nosys(void); } syscall nosys_args int
+1	STD	NOHIDE	{ void exit(int rval); } exit rexit_args void
+2	STD	POSIX	{ int fork(void); }
+3	STD	POSIX	{ ssize_t read(int fd, void *buf, size_t nbyte); }
+4	STD	POSIX	{ ssize_t write(int fd, const void *buf, size_t nbyte); }
+5	STD	POSIX	{ int open(char *path, int flags, int mode); }
+6	STD	POSIX	{ int close(int fd); }
+etc...</pre></div></div><div class=paragraph><p>最左边的列告诉我们要放入 <code>EAX</code> 中的数字。</p></div><div class=paragraph><p>最右边的一列告诉我们要 <code>push</code> 哪些参数。它们 <em>从右向左</em> 被 <code>push</code>。</p></div><div class=paragraph><p>例如，要 <code>open</code> 一个文件，我们需要先 <code>push</code> <code>mode</code> ，然后是 <code>flags</code> ，然后是存储 <code>path</code> 的地址。</p></div></div></div></div></div><div class=sect1><h2 id=x86-return-values>A.4. 返回值<a class=anchor href=#x86-return-values></a></h2><div class=sectionbody><div class=paragraph><p>如果一个系统调用没有返回某种类型的值:打开文件的文件描述符、读取到缓冲区的字节数、系统时间等，那么它在大多数情况下是没有用的。</p></div><div class=paragraph><p>此外，如果发生错误，系统需要通知我们:文件不存在，系统资源耗尽，我们传递了一个无效的参数，等等。</p></div><div class=sect2><h3 id=x86-man-pages>A.4.1. 手册页<a class=anchor href=#x86-man-pages></a></h3><div class=paragraph><p>在UNIX®系统中查找各种系统调用信息的传统地方是手册页。FreeBSD在第2部分描述了它的系统调用，有时在第3部分。</p></div><div class=paragraph><p>例如， <a href="https://www.freebsd.org/cgi/man.cgi?query=open&sektion=2&format=html">open(2)</a> 所示:</p></div><div class="paragraph blockquote"><p>如果成功， <code>open()</code> 返回一个非负整数，称为文件描述符。失败时它返回 <code>-1</code> ，并设置 <code>errno</code> 以指示错误。</p></div><div class=paragraph><p>刚接触UNIX®和FreeBSD的汇编语言程序员会立即问一个令人困惑的问题： <code>errno</code> 在哪里?我如何到达它?</p></div><div class="admonitionblock note"><table><tbody><tr><td class=icon><i class="fa icon-note" title=Note></i></td><td class=content><div class=paragraph><p>手册中提供的信息适用于C程序。汇编语言程序员需要额外的信息。</p></div></td></tr></tbody></table></div></div><div class=sect2><h3 id=x86-where-return-values>A.4.2. 返回值在哪里?<a class=anchor href=#x86-where-return-values></a></h3><div class=paragraph><p>不幸的是，这要视情况而定……对于大多数系统调用，它都在 <code>EAX</code> 中，但不是所有的。当第一次使用系统调用时，一条很好的经验法则是在 <code>EAX</code> 中查找返回值。如果没有，你需要进一步的研究。</p></div><div class="admonitionblock note"><table><tbody><tr><td class=icon><i class="fa icon-note" title=Note></i></td><td class=content><div class=paragraph><p>我知道有一个系统调用返回 <code>EDX</code>: <code>SYS_fork</code> 中的值。我工作过的其他所有人都使用 <code>EAX</code> 。但我还没有和所有人一起工作过。</p></div></td></tr></tbody></table></div><div class="admonitionblock tip"><table><tbody><tr><td class=icon><i class="fa icon-tip" title=Tip></i></td><td class=content><div class=paragraph><p>如果您在这里或其他地方找不到答案，请研究 libc 源代码，看看它是如何与内核交互的。</p></div></td></tr></tbody></table></div></div><div class=sect2><h3 id=x86-where-errno>A.4.3. <code>errno</code> 在哪里?<a class=anchor href=#x86-where-errno></a></h3><div class=paragraph><p>实际上,没有…​</p></div><div class=paragraph><p><code>errno</code> 是C语言的一部分，不是UNIX®内核的一部分。当直接访问内核服务时，错误代码在 <code>EAX</code>中返回，正确的返回值通常在相同的寄存器中结束。</p></div><div class=paragraph><p>这完全有道理。如果没有错误，就没有错误代码。如果出现错误，则没有返回值。一个寄存器可以包含任何一种。</p></div></div><div class=sect2><h3 id=x86-how-to-know-error>A.4.4. 确定发生了错误<a class=anchor href=#x86-how-to-know-error></a></h3><div class=paragraph><p>当使用标准FreeBSD调用约定时，成功时清除 <code>carry flag</code> ，失败时设置 <code>carry flag</code> 。 </p></div><div class=paragraph><p>当使用Linux模拟模式时，成功时 <code>EAX</code> 中的带符号值是非负的，并且包含返回值。如果出现错误，则该值为负数，即 <code>-errno</code>。</p></div></div></div></div><div class=sect1><h2 id=x86-portable-code>A.5. 创建可移植代码<a class=anchor href=#x86-portable-code></a></h2><div class=sectionbody><div class=paragraph><p>可移植性通常不是汇编语言的优点之一。但是，为不同的平台编写汇编语言程序是可能的，特别是使用nasm。我编写了汇编语言库，可以为Windows®和FreeBSD等不同的操作系统进行汇编。</p></div><div class=paragraph><p>当您希望您的代码在两个平台上运行时，这就更有可能了，虽然这两个平台不同，但基于相似的体系结构。</p></div><div class=paragraph><p>例如，FreeBSD是UNIX®，Linux是UNIX®之类的。我只提到了它们之间的三个区别(从汇编语言程序员的角度来看):调用约定、函数号和返回值的方式。</p></div><div class=sect2><h3 id=x86-deal-with-function-numbers>A.5.1. 函数编号的处理<a class=anchor href=#x86-deal-with-function-numbers></a></h3><div class=paragraph><p>在许多情况下，函数号是相同的。然而，即使它们不是，问题也很容易处理:在代码中不要使用数字，而是使用根据目标架构声明的不同的常量:</p></div><div class="literalblock programlisting"><div class=content><pre>%ifdef	LINUX
+%define	SYS_execve	11
+%else
+%define	SYS_execve	59
+%endif</pre></div></div></div><div class=sect2><h3 id=x86-deal-with-geneva>A.5.2. 处理约定<a class=anchor href=#x86-deal-with-geneva></a></h3><div class=paragraph><p>调用约定和返回值 ( <code>errno</code> 问题) 都可以通过宏来解决:</p></div><div class="literalblock programlisting"><div class=content><pre>%ifdef	LINUX
+
+%macro	system	0
+	call	kernel
+%endmacro
+
+align 4
+kernel:
+	push	ebx
+	push	ecx
+	push	edx
+	push	esi
+	push	edi
+	push	ebp
+
+	mov	ebx, [esp+32]
+	mov	ecx, [esp+36]
+	mov	edx, [esp+40]
+	mov	esi, [esp+44]
+	mov	ebp, [esp+48]
+	int	80h
+
+	pop	ebp
+	pop	edi
+	pop	esi
+	pop	edx
+	pop	ecx
+	pop	ebx
+
+	or	eax, eax
+	js	.errno
+	clc
+	ret
+
+.errno:
+	neg	eax
+	stc
+	ret
+
+%else
+
+%macro	system	0
+	int	80h
+%endmacro
+
+%endif</pre></div></div></div><div class=sect2><h3 id=x86-deal-with-other-portability>A.5.3. 处理其他可移植性问题<a class=anchor href=#x86-deal-with-other-portability></a></h3><div class=paragraph><p>上述解决方案可以处理编写在FreeBSD和Linux之间可移植的代码的大多数情况。然而，对于一些内核服务，差异更大。</p></div><div class=paragraph><p>在这种情况下，您需要为这些特定的系统调用编写两个不同的处理程序，并使用条件程序集。幸运的是，大多数代码都不是调用内核的，所以通常在代码中只需要少数这样的条件部分。</p></div></div><div class=sect2><h3 id=x86-portable-library>A.5.4. 使用库<a class=anchor href=#x86-portable-library></a></h3><div class=paragraph><p>通过编写一个系统调用库，可以避免主代码中的可移植性问题。为FreeBSD创建一个单独的库，为Linux创建一个不同的库，以及为更多操作系统创建其他库。</p></div><div class=paragraph><p>在库中，为每个系统调用编写单独的函数(或者过程，如果您喜欢传统的汇编语言术语)。使用传递参数的C调用约定。但仍然使用 <code>EAX</code> 来传递呼叫号码。在这种情况下，你的FreeBSD库可以非常简单，因为许多看起来不同的函数可能只是相同代码的标签:</p></div><div class="literalblock programlisting"><div class=content><pre>sys.open:
+sys.close:
+[etc...]
+	int	80h
+	ret</pre></div></div><div class=paragraph><p>您的Linux库将需要更多不同的函数。但即使在这里，您也可以使用相同数量的参数对系统调用进行分组:</p></div><div class="literalblock programlisting"><div class=content><pre>sys.exit:
+sys.close:
+[etc... one-parameter functions]
+	push	ebx
+	mov	ebx, [esp+12]
+	int	80h
+	pop	ebx
+	jmp	sys.return
+
+...
+
+sys.return:
+	or	eax, eax
+	js	sys.err
+	clc
+	ret
+
+sys.err:
+	neg	eax
+	stc
+	ret</pre></div></div><div class=paragraph><p>库方法一开始可能看起来不方便，因为它要求您生成代码所依赖的单独文件。但是它有很多优点:首先，您只需要编写一次它，并且可以对所有程序使用它。您甚至可以让其他汇编语言程序员使用它，或者使用其他人编写的程序。但是，这个库最大的优点可能是，您的代码可以移植到其他系统上，甚至可以被其他程序员移植到其他系统上，只需编写一个新的库，而无需对代码进行任何更改。</p></div><div class=paragraph><p>如果不喜欢使用库，至少可以将所有系统调用放在单独的汇编语言文件中，并将其链接到主程序。在这里，所有的波特必须做的是创建一个新的目标文件链接到您的主程序。</p></div></div><div class=sect2><h3 id=x86-portable-include>A.5.5. 使用包含文件<a class=anchor href=#x86-portable-include></a></h3><div class=paragraph><p>如果您以源代码的形式发布软件，则可以使用宏并将它们放在单独的文件中，并将其包含在代码中。</p></div><div class=paragraph><p>软件的搬运工将简单地编写一个新的包含文件。不需要库或外部目标文件，但是您的代码是可移植的，不需要编辑代码。</p></div><div class="admonitionblock note"><table><tbody><tr><td class=icon><i class="fa icon-note" title=Note></i></td><td class=content><div class=paragraph><p>这就是我们将贯穿本章的方法。我们将把包含文件命名为 <span class=filename>system.inc</span> ，并在处理新的系统调用时向其添加内容。</p></div></td></tr></tbody></table></div><div class=paragraph><p>我们可以通过声明标准文件描述符来启动 <span class=filename>system.inc</span> :</p></div><div class="literalblock programlisting"><div class=content><pre>%define	stdin	0
+%define	stdout	1
+%define	stderr	2</pre></div></div><div class=paragraph><p>接下来，我们为每个系统调用创建一个符号名:</p></div><div class="literalblock programlisting"><div class=content><pre>%define	SYS_nosys	0
+%define	SYS_exit	1
+%define	SYS_fork	2
+%define	SYS_read	3
+%define	SYS_write	4
+; [etc...]</pre></div></div><div class=paragraph><p>我们添加了一个短的、非全局的过程，它的名字很长，这样我们就不会在代码中重用这个名字:</p></div><div class="literalblock programlisting"><div class=content><pre>section	.text
+align 4
+access.the.bsd.kernel:
+	int	80h
+	ret</pre></div></div><div class=paragraph><p>我们创建一个宏，它有一个参数，即系统调用号:</p></div><div class="literalblock programlisting"><div class=content><pre>%macro	system	1
+	mov	eax, %1
+	call	access.the.bsd.kernel
+%endmacro</pre></div></div><div class=paragraph><p>最后，我们为每个系统调用创建宏。这些宏没有参数。</p></div><div class="literalblock programlisting"><div class=content><pre>%macro	sys.exit	0
+	system	SYS_exit
+%endmacro
+
+%macro	sys.fork	0
+	system	SYS_fork
+%endmacro
+
+%macro	sys.read	0
+	system	SYS_read
+%endmacro
+
+%macro	sys.write	0
+	system	SYS_write
+%endmacro
+
+; [etc...]</pre></div></div><div class=paragraph><p>继续，将它输入到编辑器中，并将其保存为 <span class=filename>system.inc</span>。我们将在讨论更多的系统调用时向它添加更多内容。</p></div></div></div></div><div class=sect1><h2 id=x86-first-program>A.6. 我们的第一个程序<a class=anchor href=#x86-first-program></a></h2><div class=sectionbody><div class=paragraph><p>现在我们准备好第一个节目，强制性的 Hello, World!</p></div><div class="literalblock programlisting"><div class=content><pre>1:	%include	&#39;system.inc&#39;
+ 2:
+ 3:	section	.data
+ 4:	hello	db	&#39;Hello, World!&#39;, 0Ah
+ 5:	hbytes	equ	$-hello
+ 6:
+ 7:	section	.text
+ 8:	global	_start
+ 9:	_start:
+10:	push	dword hbytes
+11:	push	dword hello
+12:	push	dword stdout
+13:	sys.write
+14:
+15:	push	dword 0
+16:	sys.exit</pre></div></div><div class=paragraph><p>它的功能如下:第1行包括定义、宏和来自 <span class=filename>system.inc</span> 的代码。</p></div><div class=paragraph><p>第3-5行是数据:第3行开始数据节/段。第4行包含字符串“Hello, World!”，后面跟着一个新行 (<code>0Ah</code>)。第5行创建一个常量，其中包含第4行字符串的长度(以字节为单位)。</p></div><div class=paragraph><p>第7-16行包含代码。注意，FreeBSD对它的可执行文件使用 <em>elf</em> 文件格式，这要求每个程序都从标记为 <code>_start</code> 的点开始(或者，更准确地说，链接器期望如此)。这个标签必须是全球性的。</p></div><div class=paragraph><p>第10-13行要求系统将 <code>hello</code> 字符串的 <code>hbytes</code> 字节写入 <code>stdout</code>。</p></div><div class=paragraph><p>第15-16行要求系统以返回值 <code>0</code> 结束程序。 <code>SYS_exit</code> 系统调用永远不会返回，因此代码在此结束。</p></div><div class="admonitionblock note"><table><tbody><tr><td class=icon><i class="fa icon-note" title=Note></i></td><td class=content><div class=paragraph><p>如果你从MS-DOS®汇编语言背景开始接触UNIX®，你可能会习惯直接写入视频硬件。在FreeBSD或任何其他UNIX®版本中，您都不必担心这个问题。就您而言，您正在写入一个称为 <span class=filename>stdout</span> 的文件。这可以是视频屏幕，或telnet终端，或一个实际的文件，甚至是另一个程序的输入。哪一个是，由系统来计算。</p></div></td></tr></tbody></table></div><div class=sect2><h3 id=x86-assemble-1>A.6.1. 汇编代码<a class=anchor href=#x86-assemble-1></a></h3><div class=paragraph><p>在编辑器中键入代码(行号除外)，并将其保存在名为 <span class=filename>hello.asm</span> 的文件中。你需要nasm来组装它。</p></div><div class=sect3><h4 id=x86-get-nasm>A.6.1.1. 安装 nasm<a class=anchor href=#x86-get-nasm></a></h4><div class=paragraph><p>如果没有nasm，请输入:</p></div><div class=listingblock><div class=content><pre class="rouge highlight"><code data-lang=shell>% su
+Password:your root password
+<span class=c># cd /usr/ports/devel/nasm</span>
+<span class=c># make install</span>
+<span class=c># exit</span>
+%</code></pre></div></div><div class=paragraph><p>如果你不想保留nasm源代码，你可以输入 <code>make install clean</code> 而不是 <code>make install</code> 。</p></div><div class=paragraph><p>无论哪种方式，FreeBSD都将自动从Internet下载nasm，编译它，并将其安装到您的系统上。</p></div><div class="admonitionblock note"><table><tbody><tr><td class=icon><i class="fa icon-note" title=Note></i></td><td class=content><div class=paragraph><p>如果您的系统不是FreeBSD，则需要从其 <a href=https://sourceforge.net/projects/nasm>主页</a> 获取nasm。您仍然可以使用它来组装FreeBSD代码。</p></div></td></tr></tbody></table></div><div class=paragraph><p>现在您可以汇编、链接并运行代码:</p></div><div class=listingblock><div class=content><pre class="rouge highlight"><code data-lang=shell>% nasm <span class=nt>-f</span> elf hello.asm
+% ld <span class=nt>-s</span> <span class=nt>-o</span> hello hello.o
+% ./hello
+Hello, World!
+%</code></pre></div></div></div></div></div></div><div class=sect1><h2 id=x86-unix-filters>A.7. 写作的UNIX®过滤器<a class=anchor href=#x86-unix-filters></a></h2><div class=sectionbody><div class=paragraph><p>一种常见的UNIX®应用程序是过滤器——从 <span class=filename>stdin</span>读取数据，以某种方式处理数据，然后将结果写入 <span class=filename>stdout</span> 的程序。</p></div><div class=paragraph><p>在本章中，我们将开发一个简单的过滤器，并学习如何从 <span class=filename>stdin</span> 读取并写入 <span class=filename>stdout</span>。该过滤器将其输入的每个字节转换为后面跟着空格的十六进制数。</p></div><div class="literalblock programlisting"><div class=content><pre>%include	&#39;system.inc&#39;
+
+section	.data
+hex	db	&#39;0123456789ABCDEF&#39;
+buffer	db	0, 0, &#39; &#39;
+
+section	.text
+global	_start
+_start:
+	; read a byte from stdin
+	push	dword 1
+	push	dword buffer
+	push	dword stdin
+	sys.read
+	add	esp, byte 12
+	or	eax, eax
+	je	.done
+
+	; convert it to hex
+	movzx	eax, byte [buffer]
+	mov	edx, eax
+	shr	dl, 4
+	mov	dl, [hex+edx]
+	mov	[buffer], dl
+	and	al, 0Fh
+	mov	al, [hex+eax]
+	mov	[buffer+1], al
+
+	; print it
+	push	dword 3
+	push	dword buffer
+	push	dword stdout
+	sys.write
+	add	esp, byte 12
+	jmp	short _start
+
+.done:
+	push	dword 0
+	sys.exit</pre></div></div><div class=paragraph><p>在数据部分，我们创建了一个名为 <code>hex</code> 的数组。由16位按升序排列的十六进制数字组成。数组后面是一个缓冲区，我们将用于输入和输出。缓冲区的前两个字节最初被设置为 <code>0</code>。这是我们写入两个十六进制数字的地方(第一个字节也是我们读取输入的地方)。第三个字节是一个空格。</p></div><div class=paragraph><p>代码部分由四部分组成:读取字节，将其转换为十六进制数，写入结果，并最终退出程序。</p></div><div class=paragraph><p>为了读取字节，我们要求系统从 <span class=filename>stdin</span> 中读取一个字节，并将其存储在 <code>buffer</code> 的第一个字节中。系统返回 <code>EAX</code> 中读取的字节数。当有数据输入时，该值为 <code>1</code> ;当没有更多输入数据可用时，该值为 <code>0</code> 。因此，我们检查 <code>EAX</code> 的值。如果它是 <code>0</code>, 我们跳转到 <code>.done</code>, 否则继续。</p></div><div class="admonitionblock note"><table><tbody><tr><td class=icon><i class="fa icon-note" title=Note></i></td><td class=content><div class=paragraph><p>为了简单起见，我们现在忽略了出现错误条件的可能性。</p></div></td></tr></tbody></table></div><div class=paragraph><p>十六进制转换将字节从 <code>buffer</code> 读入 <code>EAX</code> ，或者实际上只是 <code>AL</code> ，同时将 <code>EAX</code> 的其余位清除为零。我们还将字节复制到 <code>EDX</code> ，因为我们需要将上四位与下四位分别转换。我们将结果存储在缓冲区的前两个字节中。</p></div><div class=paragraph><p>接下来，我们要求系统将缓冲区的三个字节(即两个十六进制数字和空格)写入 <span class=filename>stdout</span> 。然后，我们跳回到程序的开头，处理下一个字节。</p></div><div class=paragraph><p>一旦没有更多的输入，我们要求系统退出我们的程序，返回一个0，这是传统的值，意味着程序成功。</p></div><div class=paragraph><p>继续，并将代码保存在一个名为 <span class=filename>hex.asm</span>的文件中。asm，然后输入以下命令（ <code>^D</code> 表示按住控制键并输入 <code>D</code> ，同时按住控制键):</p></div><div class=listingblock><div class=content><pre class="rouge highlight"><code data-lang=shell>% nasm <span class=nt>-f</span> elf hex.asm
+% ld <span class=nt>-s</span> <span class=nt>-o</span> hex hex.o
+% ./hex
+Hello, World!
+48 65 6C 6C 6F 2C 20 57 6F 72 6C 64 21 0A Here I come!
+48 65 72 65 20 49 20 63 6F 6D 65 21 0A ^D %</code></pre></div></div><div class="admonitionblock note"><table><tbody><tr><td class=icon><i class="fa icon-note" title=Note></i></td><td class=content><div class=paragraph><p>	
+如果您正从MS-DOS®迁移到UNIX®，您可能想知道为什么每一行都以 <code>0A</code> 而不是 <code>0D 0A</code> 结束。这是因为UNIX®不使用cr/lf约定，而是使用“新行”约定，即十六进制的 <code>0A</code> 。</p></div></td></tr></tbody></table></div><div class=paragraph><p>我们能改进这一点吗?首先，这有点令人困惑，因为一旦我们转换了一行文本，我们的输入就不再是从行首开始了。我们可以修改它，打印一个新的行，而不是每个 <code>0A</code> 后面的空格:</p></div><div class="literalblock programlisting"><div class=content><pre>%include	&#39;system.inc&#39;
+
+section	.data
+hex	db	&#39;0123456789ABCDEF&#39;
+buffer	db	0, 0, &#39; &#39;
+
+section	.text
+global	_start
+_start:
+	mov	cl, &#39; &#39;
+
+.loop:
+	; read a byte from stdin
+	push	dword 1
+	push	dword buffer
+	push	dword stdin
+	sys.read
+	add	esp, byte 12
+	or	eax, eax
+	je	.done
+
+	; convert it to hex
+	movzx	eax, byte [buffer]
+	mov	[buffer+2], cl
+	cmp	al, 0Ah
+	jne	.hex
+	mov	[buffer+2], al
+
+.hex:
+	mov	edx, eax
+	shr	dl, 4
+	mov	dl, [hex+edx]
+	mov	[buffer], dl
+	and	al, 0Fh
+	mov	al, [hex+eax]
+	mov	[buffer+1], al
+
+	; print it
+	push	dword 3
+	push	dword buffer
+	push	dword stdout
+	sys.write
+	add	esp, byte 12
+	jmp	short .loop
+
+.done:
+	push	dword 0
+	sys.exit</pre></div></div><div class=paragraph><p>我们已经将空间存储在 <code>CL</code> 寄存器中。我们可以安全地这样做，因为与Microsoft®Windows®不同，UNIX®系统调用不会修改它们不用于返回值的任何寄存器的值。</p></div><div class=paragraph><p>这意味着我们只需要设置一次 <code>CL</code> 。因此，我们添加了一个新的标签 <code>.loop</code> ，并跳到它的下一个字节，而不是跳到 <code>_start</code>。我们还添加了 <code>.hex</code> 标签，因此我们可以有一个空白空间或一个新行作为 <code>buffer</code> 的第三个字节。</p></div><div class=paragraph><p>一旦你改变了 <span class=filename>hex.asm</span> 来反映这些变化，输入: </p></div><div class=listingblock><div class=content><pre class="rouge highlight"><code data-lang=shell>% nasm <span class=nt>-f</span> elf hex.asm
+% ld <span class=nt>-s</span> <span class=nt>-o</span> hex hex.o
+% ./hex
+Hello, World!
+48 65 6C 6C 6F 2C 20 57 6F 72 6C 64 21 0A
+Here I come!
+48 65 72 65 20 49 20 63 6F 6D 65 21 0A
+^D %</code></pre></div></div><div class=paragraph><p>这看起来更好。但是这段代码非常低效!我们对每个字节进行两次系统调用(一次读取它，另一次写入输出)。</p></div></div></div><div class=sect1><h2 id=x86-buffered-io>A.8. 缓冲输入和输出<a class=anchor href=#x86-buffered-io></a></h2><div class=sectionbody><div class=paragraph><p>我们可以通过缓冲输入和输出来提高代码的效率。我们创建一个输入缓冲区，并一次读取整个字节序列。然后我们一个一个地从缓冲区获取它们。</p></div><div class=paragraph><p>我们还创建了一个输出缓冲区。我们将输出存储在其中，直到它被满为止。这时，我们要求内核将缓冲区的内容写入 <span class=filename>stdout</span>。</p></div><div class=paragraph><p>当没有更多输入时，程序结束。但是我们仍然需要要求内核最后一次将输出缓冲区的内容写入 <span class=filename>stdout</span> 否则我们的一些输出将到达输出缓冲区，但从未被发送出去。不要忘记这一点，否则您会奇怪为什么丢失了一些输出。</p></div><div class="literalblock programlisting"><div class=content><pre>%include	&#39;system.inc&#39;
+
+%define	BUFSIZE	2048
+
+section	.data
+hex	db	&#39;0123456789ABCDEF&#39;
+
+section .bss
+ibuffer	resb	BUFSIZE
+obuffer	resb	BUFSIZE
+
+section	.text
+global	_start
+_start:
+	sub	eax, eax
+	sub	ebx, ebx
+	sub	ecx, ecx
+	mov	edi, obuffer
+
+.loop:
+	; read a byte from stdin
+	call	getchar
+
+	; convert it to hex
+	mov	dl, al
+	shr	al, 4
+	mov	al, [hex+eax]
+	call	putchar
+
+	mov	al, dl
+	and	al, 0Fh
+	mov	al, [hex+eax]
+	call	putchar
+
+	mov	al, &#39; &#39;
+	cmp	dl, 0Ah
+	jne	.put
+	mov	al, dl
+
+.put:
+	call	putchar
+	jmp	short .loop
+
+align 4
+getchar:
+	or	ebx, ebx
+	jne	.fetch
+
+	call	read
+
+.fetch:
+	lodsb
+	dec	ebx
+	ret
+
+read:
+	push	dword BUFSIZE
+	mov	esi, ibuffer
+	push	esi
+	push	dword stdin
+	sys.read
+	add	esp, byte 12
+	mov	ebx, eax
+	or	eax, eax
+	je	.done
+	sub	eax, eax
+	ret
+
+align 4
+.done:
+	call	write		; flush output buffer
+	push	dword 0
+	sys.exit
+
+align 4
+putchar:
+	stosb
+	inc	ecx
+	cmp	ecx, BUFSIZE
+	je	write
+	ret
+
+align 4
+write:
+	sub	edi, ecx	; start of buffer
+	push	ecx
+	push	edi
+	push	dword stdout
+	sys.write
+	add	esp, byte 12
+	sub	eax, eax
+	sub	ecx, ecx	; buffer is empty now
+	ret</pre></div></div><div class=paragraph><p>我们现在有了源代码中的第三部分，名为 <code>.bss</code> 。此部分不包含在我们的可执行文件中，因此无法初始化。我们使用 <code>resb</code> 而不是 <code>db</code>。它只是保留所请求的未初始化内存大小供我们使用。</p></div><div class=paragraph><p>我们利用了系统不修改寄存器这一事实:我们将寄存器用于存储在 <code>.data</code> 部分的全局变量。这也是为什么UNIX在堆栈上向系统调用传递参数的约定优于Microsoft在寄存器中传递参数的约定:我们可以保留寄存器供自己使用。</p></div><div class=paragraph><p>我们使用 <code>EDI</code> 和 <code>ESI</code> 作为指向下一个要读取或写入的字节的指针。我们使用 <code>EBX</code> 和 <code>ECX</code> 来记录两个缓冲区中的字节数，这样我们就知道什么时候将输出转储到系统中，或者从系统中读取更多输入。</p></div><div class=paragraph><p>现在让我们看看它是如何工作的:</p></div><div class=listingblock><div class=content><pre class="rouge highlight"><code data-lang=shell>% nasm <span class=nt>-f</span> elf hex.asm
+% ld <span class=nt>-s</span> <span class=nt>-o</span> hex hex.o
+% ./hex
+Hello, World!
+Here I come!
+48 65 6C 6C 6F 2C 20 57 6F 72 6C 64 21 0A
+48 65 72 65 20 49 20 63 6F 6D 65 21 0A
+^D %</code></pre></div></div><div class=paragraph><p>和你想象的不一样?直到我们按 <code>^D</code>，程序才打印输出。这很容易解决，只需在每次将新行转换为 <code>0A</code>时插入三行代码来编写输出即可。我已经用>标记了这三行(不要在你的 <span class=filename>hex.asm</span> 中复制>)。</p></div><div class="literalblock programlisting"><div class=content><pre>%include	&#39;system.inc&#39;
+
+%define	BUFSIZE	2048
+
+section	.data
+hex	db	&#39;0123456789ABCDEF&#39;
+
+section .bss
+ibuffer	resb	BUFSIZE
+obuffer	resb	BUFSIZE
+
+section	.text
+global	_start
+_start:
+	sub	eax, eax
+	sub	ebx, ebx
+	sub	ecx, ecx
+	mov	edi, obuffer
+
+.loop:
+	; read a byte from stdin
+	call	getchar
+
+	; convert it to hex
+	mov	dl, al
+	shr	al, 4
+	mov	al, [hex+eax]
+	call	putchar
+
+	mov	al, dl
+	and	al, 0Fh
+	mov	al, [hex+eax]
+	call	putchar
+
+	mov	al, &#39; &#39;
+	cmp	dl, 0Ah
+	jne	.put
+	mov	al, dl
+
+.put:
+	call	putchar
+&gt;	cmp	al, 0Ah
+&gt;	jne	.loop
+&gt;	call	write
+	jmp	short .loop
+
+align 4
+getchar:
+	or	ebx, ebx
+	jne	.fetch
+
+	call	read
+
+.fetch:
+	lodsb
+	dec	ebx
+	ret
+
+read:
+	push	dword BUFSIZE
+	mov	esi, ibuffer
+	push	esi
+	push	dword stdin
+	sys.read
+	add	esp, byte 12
+	mov	ebx, eax
+	or	eax, eax
+	je	.done
+	sub	eax, eax
+	ret
+
+align 4
+.done:
+	call	write		; flush output buffer
+	push	dword 0
+	sys.exit
+
+align 4
+putchar:
+	stosb
+	inc	ecx
+	cmp	ecx, BUFSIZE
+	je	write
+	ret
+
+align 4
+write:
+	sub	edi, ecx	; start of buffer
+	push	ecx
+	push	edi
+	push	dword stdout
+	sys.write
+	add	esp, byte 12
+	sub	eax, eax
+	sub	ecx, ecx	; buffer is empty now
+	ret</pre></div></div><div class=paragraph><p>现在，让我们看看它是如何工作的:</p></div><div class=listingblock><div class=content><pre class="rouge highlight"><code data-lang=shell>% nasm <span class=nt>-f</span> elf hex.asm
+% ld <span class=nt>-s</span> <span class=nt>-o</span> hex hex.o
+% ./hex
+Hello, World!
+48 65 6C 6C 6F 2C 20 57 6F 72 6C 64 21 0A
+Here I come!
+48 65 72 65 20 49 20 63 6F 6D 65 21 0A
+^D %</code></pre></div></div><div class=paragraph><p>对于一个644字节的可执行文件来说，还不错吧!</p></div><div class="admonitionblock note"><table><tbody><tr><td class=icon><i class="fa icon-note" title=Note></i></td><td class=content><div class=paragraph><p>这种缓冲输入/输出的方法仍然包含一个隐患。我将在以后讨论 <a href=#x86-buffered-dark-side>缓冲的阴暗面</a> 时讨论并修正它。</p></div></td></tr></tbody></table></div><div class=sect2><h3 id=x86-ungetc>A.8.1. 如何取消读一个字符<a class=anchor href=#x86-ungetc></a></h3><div class="admonitionblock warning"><table><tbody><tr><td class=icon><i class="fa icon-warning" title=Warning></i></td><td class=content><div class=paragraph><p>这可能是一个比较高级的主题，对熟悉编译器理论的程序员来说很有兴趣。如果你愿意，你可以 <a href=#x86-command-line>跳到下一节</a> ，或者稍后再读这篇文章。</p></div></td></tr></tbody></table></div><div class=paragraph><p>虽然我们的示例程序不需要它，但更复杂的过滤器通常需要向前看。换句话说，他们可能需要看到下一个字符是什么(甚至是几个字符)。如果下一个字符具有某个值，则它是当前正在处理的令牌的一部分。否则，就不是。</p></div><div class=paragraph><p>例如，您可能正在解析文本字符串的输入流(例如，在实现语言编译器时):如果一个字符后面跟着另一个字符，或者可能是一个数字，那么它就是您正在处理的令牌的一部分。如果后面跟着空格或其他值，那么它就不是当前标记的一部分。</p></div><div class=paragraph><p>这就产生了一个有趣的问题:如何将下一个字符返回到输入流，以便稍后再次读取它?</p></div><div class=paragraph><p>一个可能的解决方案是将其存储在一个字符变量中，然后设置一个标志。我们可以修改 <code>getchar</code> 来检查标志，如果它被设置了，从该变量而不是输入缓冲区中获取字节，并重置标志。但是，当然，这会减慢我们的速度。</p></div><div class=paragraph><p>C语言有一个 <code>ungetc()</code> 函数，就是为了这个目的。有没有一种快速的方法在我们的代码中实现它?我想让您在阅读下一段之前，先回顾一下 <code>getchar</code> 过程，看看是否能找到一个好的、快速的解决方案。然后回到这里，看看我自己的解决方案。</p></div><div class=paragraph><p>将字符返回到流的关键在于我们如何开始获取字符:</p></div><div class=paragraph><p>首先，我们通过测试 <code>EBX</code> 的值来检查缓冲区是否为空。如果为0，则调用 <code>read</code> 过程。</p></div><div class=paragraph><p>如果我们确实有一个可用的字符，我们使用 <code>lodsb</code> ，然后减少 <code>EBX</code> 的值。 <code>lodsb</code> 指令实际上等同于:</p></div><div class="literalblock programlisting"><div class=content><pre>mov	al, [esi]
+	inc	esi</pre></div></div><div class=paragraph><p>我们获取的字节一直保存在缓冲区中，直到下一次调用 <code>read</code> 。我们不知道它何时发生，但我们知道它不会发生，直到下一次调用 <code>getchar</code>。因此，要将最后读的字节“返回”回流，我们所要做的就是降低 <code>ESI</code> 的值，增加 <code>EBX</code> 的值:</p></div><div class="literalblock programlisting"><div class=content><pre>ungetc:
+	dec	esi
+	inc	ebx
+	ret</pre></div></div><div class=paragraph><p>但是,小心!如果我们的前瞻每次最多只能看到一个字符，那么这样做是完全安全的。如果我们要检查多个即将出现的字符，并连续多次调用 <code>ungetc</code> c，那么它在大多数情况下都能工作，但不是所有情况下都能工作(并且很难调试)。为什么?</p></div><div class=paragraph><p>因为只要 <code>getchar</code> 不需要调用 <code>read</code> ，所有预读字节都仍然在缓冲区中，我们的 <code>ungetc</code> 工作起来没有任何故障。但是当 <code>getchar</code> 调用 <code>read</code> 时，缓冲区的内容就会发生变化。</p></div><div class=paragraph><p>我们总是可以指望 <code>ungetc</code> 在使用 <code>getchar</code>读取的最后一个字符上正常工作，但在此之前读取的任何字符上都不能正常工作。</p></div><div class=paragraph><p>如果你的程序读取超过一个字节，你至少有两个选择:</p></div><div class=paragraph><p>如果可能的话，修改程序，使它只向前读取一个字节。这是最简单的解决方案。</p></div><div class=paragraph><p>如果该选项不可用，首先确定程序一次需要返回到输入流的最大字符数。为了确保安全，稍微增加这个数字，最好是16的倍数，这样就能很好地对齐。然后修改代码的 <code>.bss</code> 部分，在输入缓冲区之前创建一个小的“备用”缓冲区，就像这样:</p></div><div class="literalblock programlisting"><div class=content><pre>section	.bss
+	resb	16	; or whatever the value you came up with
+ibuffer	resb	BUFSIZE
+obuffer	resb	BUFSIZE</pre></div></div><div class=paragraph><p>你还需要修改你的 <code>ungetc</code> ，将字节的值传递给 <code>AL</code> 中的 unget:</p></div><div class="literalblock programlisting"><div class=content><pre>ungetc:
+	dec	esi
+	inc	ebx
+	mov	[esi], al
+	ret</pre></div></div><div class=paragraph><p>通过这种修改，您可以在一行中安全地调用 <code>ungetc</code> 最多17次(第一次调用仍然在缓冲区中，其余16次可能在缓冲区中或在“空闲”中)。</p></div></div></div></div><div class=sect1><h2 id=x86-command-line>A.9. 命令行参数<a class=anchor href=#x86-command-line></a></h2><div class=sectionbody><div class=paragraph><p>如果十六进制程序能够从命令行读取输入和输出文件的名称，也就是说，如果它能够处理命令行参数，那么它将更加有用。但是，他们在哪里?</p></div><div class=paragraph><p>在UNIX®系统启动一个程序之前，它将一些数据 <code>push</code> 堆栈，然后在程序的 <code>_start</code> 标签处跳转。是的，我说的是跳，不是叫。这意味着可以通过读取 <code>[esp+offset]</code> 或简单地 <code>pop</code> 数据来访问数据。</p></div><div class=paragraph><p>堆栈顶部的值包含命令行参数的数量。它通常被称为 <code>argc</code> ，表示“参数计数”。</p></div><div class=paragraph><p>命令行参数紧随其后，所有参数都为 <code>argc</code> 。这些参数通常被称为 <code>argv</code> ，表示“参数值”。也就是说，我们得到 <code>argv[0]</code>, <code>argv[1]</code>, <code>…​</code>, <code>argv[argc-1]</code> 。这些不是实际的实参，而是实参的指针，即实际实参的内存地址。参数本身是以空结束的字符串。</p></div><div class=paragraph><p><code>argv</code> 列表后面跟着一个NULL指针，它只是一个 <code>0</code> 。还有更多，但这对我们现在的目的来说已经足够了。</p></div><div class="admonitionblock note"><table><tbody><tr><td class=icon><i class="fa icon-note" title=Note></i></td><td class=content><div class=paragraph><p>
+如果你来自MS-DOS®编程环境，主要的区别是每个参数都在一个单独的字符串中。第二个区别是，对于可以有多少个参数没有实际的限制。</p></div></td></tr></tbody></table></div><div class=paragraph><p>有了这些知识，我们几乎为下一个版本的 <span class=filename>hex.asm</span> 做好了准备。然而，首先，我们需要在 <span class=filename>system.inc</span> 中添加几行代码:</p></div><div class=paragraph><p>首先，我们需要向系统调用号列表中添加两个新条目:</p></div><div class="literalblock programlisting"><div class=content><pre>%define	SYS_open	5
+%define	SYS_close	6</pre></div></div><div class=paragraph><p>然后在文件末尾添加两个新的宏:</p></div><div class="literalblock programlisting"><div class=content><pre>%macro	sys.open	0
+	system	SYS_open
+%endmacro
+
+%macro	sys.close	0
+	system	SYS_close
+%endmacro</pre></div></div><div class=paragraph><p>下面是我们修改过的源代码:</p></div><div class="literalblock programlisting"><div class=content><pre>%include	&#39;system.inc&#39;
+
+%define	BUFSIZE	2048
+
+section	.data
+fd.in	dd	stdin
+fd.out	dd	stdout
+hex	db	&#39;0123456789ABCDEF&#39;
+
+section .bss
+ibuffer	resb	BUFSIZE
+obuffer	resb	BUFSIZE
+
+section	.text
+align 4
+err:
+	push	dword 1		; return failure
+	sys.exit
+
+align 4
+global	_start
+_start:
+	add	esp, byte 8	; discard argc and argv[0]
+
+	pop	ecx
+	jecxz	.init		; no more arguments
+
+	; ECX contains the path to input file
+	push	dword 0		; O_RDONLY
+	push	ecx
+	sys.open
+	jc	err		; open failed
+
+	add	esp, byte 8
+	mov	[fd.in], eax
+
+	pop	ecx
+	jecxz	.init		; no more arguments
+
+	; ECX contains the path to output file
+	push	dword 420	; file mode (644 octal)
+	push	dword 0200h | 0400h | 01h
+	; O_CREAT | O_TRUNC | O_WRONLY
+	push	ecx
+	sys.open
+	jc	err
+
+	add	esp, byte 12
+	mov	[fd.out], eax
+
+.init:
+	sub	eax, eax
+	sub	ebx, ebx
+	sub	ecx, ecx
+	mov	edi, obuffer
+
+.loop:
+	; read a byte from input file or stdin
+	call	getchar
+
+	; convert it to hex
+	mov	dl, al
+	shr	al, 4
+	mov	al, [hex+eax]
+	call	putchar
+
+	mov	al, dl
+	and	al, 0Fh
+	mov	al, [hex+eax]
+	call	putchar
+
+	mov	al, &#39; &#39;
+	cmp	dl, 0Ah
+	jne	.put
+	mov	al, dl
+
+.put:
+	call	putchar
+	cmp	al, dl
+	jne	.loop
+	call	write
+	jmp	short .loop
+
+align 4
+getchar:
+	or	ebx, ebx
+	jne	.fetch
+
+	call	read
+
+.fetch:
+	lodsb
+	dec	ebx
+	ret
+
+read:
+	push	dword BUFSIZE
+	mov	esi, ibuffer
+	push	esi
+	push	dword [fd.in]
+	sys.read
+	add	esp, byte 12
+	mov	ebx, eax
+	or	eax, eax
+	je	.done
+	sub	eax, eax
+	ret
+
+align 4
+.done:
+	call	write		; flush output buffer
+
+	; close files
+	push	dword [fd.in]
+	sys.close
+
+	push	dword [fd.out]
+	sys.close
+
+	; return success
+	push	dword 0
+	sys.exit
+
+align 4
+putchar:
+	stosb
+	inc	ecx
+	cmp	ecx, BUFSIZE
+	je	write
+	ret
+
+align 4
+write:
+	sub	edi, ecx	; start of buffer
+	push	ecx
+	push	edi
+	push	dword [fd.out]
+	sys.write
+	add	esp, byte 12
+	sub	eax, eax
+	sub	ecx, ecx	; buffer is empty now
+	ret</pre></div></div><div class=paragraph><p>在 <code>.data</code> 部分，我们现在有两个新变量 <code>fd.in</code> 和 <code>fd.out</code> 。我们将输入和输出文件描述符存储在这里。</p></div><div class=paragraph><p>在 <code>.text</code> 部分，我们用 <code>[fd.in]</code> 和 <code>[fd.out]</code> 替换了对 <code>stdin</code> 和 <code>stdout</code> 的引用。</p></div><div class=paragraph><p><code>.text</code> 部分现在从一个简单的错误处理程序开始，它什么也不做，只是退出程序并返回值为 <code>1</code> 。错误处理程序位于 <code>_start</code> 之前，因此我们距离错误发生的地方很近。</p></div><div class=paragraph><p>当然，程序执行仍然从 <code>_start</code> 开始。首先，我们从堆栈中删除 <code>argc</code> 和 <code>argv[0]</code> :它们对我们(也就是在这个程序中)不感兴趣。</p></div><div class=paragraph><p>我们将 <code>argv[1]</code> 放入 <code>ECX</code> 。这个寄存器特别适合于指针，因为我们可以用 <code>jecxz</code> 处理NULL指针。如果 <code>argv[1]</code> 不为NULL，则尝试打开第一个参数中命名的文件。否则，我们将像以前一样继续程序:从 <code>stdin</code> 读取，写入到 <code>stdout</code> 。如果我们不能打开输入文件(例如，它不存在)，我们跳转到错误处理程序并退出。</p></div><div class=paragraph><p>如果一切顺利，我们现在检查第二个参数。如果它在那里，我们打开输出文件。否则，我们将输出发送到 <code>stdout</code> 。如果我们无法打开输出文件(例如，它存在，而我们没有写权限)，我们将再次跳转到错误处理程序。</p></div><div class=paragraph><p>其余的代码与前面相同，只是在退出之前关闭了输入和输出文件，并且如前所述，我们使用 <code>[fd.in]</code> 和 <code>[fd.out]</code> 。</p></div><div class=paragraph><p>我们的可执行文件现在有惊人的768字节长。</p></div><div class=paragraph><p>我们还能改进它吗?当然!每个程序都可以改进。以下是我们可以做的一些想法:</p></div><div class=ulist><ul><li><p>让我们的错误处理程序向 <code>stderr</code> 打印一条消息。</p></li><li><p>向 <code>read</code> 和 <code>write</code> 函数添加错误处理程序。</p></li><li><p>打开输入文件时关闭 <code>stdin</code> ，打开输出文件时关闭 <code>stdout</code> 。</p></li><li><p>添加命令行开关，例如 <code>-i</code> 和 <code>-o</code> ，这样我们就可以以任意顺序列出输入和输出文件，或者从 <code>stdin</code> 读取并写入文件。</p></li><li><p>如果命令行参数不正确，则打印用法消息。</p></li></ul></div><div class=paragraph><p>我将把这些增强作为练习留给读者:您已经了解了实现它们所需的所有知识。</p></div></div></div><div class=sect1><h2 id=x86-environment>A.10. UNIX® 环境<a class=anchor href=#x86-environment></a></h2><div class=sectionbody><div class=paragraph><p>UNIX®的一个重要概念是环境，它是由 <em>环境变量</em> 定义的。有些是由系统设置的，有些是由您设置的，还有一些是由shell或加载另一个程序的任何程序设置的。</p></div><div class=sect2><h3 id=x86-find-environment>A.10.1. 如何查找环境变量<a class=anchor href=#x86-find-environment></a></h3><div class=paragraph><p>我前面说过，当程序开始执行时，堆栈包含 <code>argc</code> ，后面是以null结束的 <code>argv</code> 数组，后面是其他的东西。“其他东西”是 <em>环境</em> ，或者更准确地说，是一个以null结尾的指向 <em>环境变量</em> 的指针数组。这通常被称为 <code>env</code> 。</p></div><div class=paragraph><p><code>env</code> 的结构与 <code>argv</code> 的结构相同，都是一个内存地址列表，后面跟着一个 NULL (<code>0</code>)。在这种情况下，没有 <code>"envc"</code> ——我们通过搜索最终的NULL来确定数组的结束位置。</p></div><div class=paragraph><p>变量通常以 <code>name=value</code> 的格式出现，但有时 <code>=value</code> 部分可能会丢失。我们需要考虑到这种可能性。</p></div></div><div class=sect2><h3 id=x86-webvar>A.10.2. webvars<a class=anchor href=#x86-webvar></a></h3><div class=paragraph><p>我可以向您展示一些代码，它们以与UNIX®env命令相同的方式打印环境。但我认为编写一个简单的汇编语言CGI实用程序会更有趣。</p></div><div class=sect3><h4 id=x86-cgi>A.10.2.1. CGI: 快速概述<a class=anchor href=#x86-cgi></a></h4><div class=paragraph><p>我在我的网站上有一个 <a href=http://www.whizkidtech.redprince.net/cgi-bin/tutorial>详细的CGI教程</a> ，但这里是一个非常快速的概述:</p></div><div class=ulist><ul><li><p>web 服务器通过设置 <em>环境变量</em> 与 CGI 程序通信。</p></li><li><p>CGI程序将其输出发送到 <span class=filename>stdout</span> 。网络服务器从那里读取数据。</p></li><li><p>它必须以HTTP头开头，后面跟着两个空行。</p></li><li><p>然后，它打印HTML代码，或它正在生成的任何其他类型的数据。</p></li></ul></div><div class="admonitionblock note"><table><tbody><tr><td class=icon><i class="fa icon-note" title=Note></i></td><td class=content><div class=paragraph><p>虽然某些 <em>环境变量</em> 使用标准名称，但其他环境变量则不同，这取决于web服务器。这使得webvar成为一个非常有用的诊断工具。</p></div></td></tr></tbody></table></div></div><div class=sect3><h4 id=x86-webvars-the-code>A.10.2.2. 代码<a class=anchor href=#x86-webvars-the-code></a></h4><div class=paragraph><p>因此，我们的webvars程序必须发送HTTP头，后面跟着一些HTML标记。然后，它必须逐一读取 <em>环境变量</em> ，并将它们作为HTML页面的一部分发送出去。</p></div><div class=paragraph><p>之前的代码。我把注释和解释放在代码中:</p></div><div class="literalblock programlisting"><div class=content><pre>;;;;;;; webvars.asm ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;
+; Copyright (c) 2000 G. Adam Stanislav
+; All rights reserved.
+;
+; Redistribution and use in source and binary forms, with or without
+; modification, are permitted provided that the following conditions
+; are met:
+; 1. Redistributions of source code must retain the above copyright
+;    notice, this list of conditions and the following disclaimer.
+; 2. Redistributions in binary form must reproduce the above copyright
+;    notice, this list of conditions and the following disclaimer in the
+;    documentation and/or other materials provided with the distribution.
+;
+; THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS&#39;&#39; AND
+; ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+; IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+; ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE
+; FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+; DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+; OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+; HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+; LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+; OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+; SUCH DAMAGE.
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;
+; Version 1.0
+;
+; Started:	 8-Dec-2000
+; Updated:	 8-Dec-2000
+;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+%include	&#39;system.inc&#39;
+
+section	.data
+http	db	&#39;Content-type: text/html&#39;, 0Ah, 0Ah
+	db	&#39;&lt;?xml version=&#34;1.0&#34; encoding=&#34;utf-8&#34;?&gt;&#39;, 0Ah
+	db	&#39;&lt;!DOCTYPE html PUBLIC &#34;-//W3C/DTD XHTML Strict//EN&#34; &#39;
+	db	&#39;&#34;DTD/xhtml1-strict.dtd&#34;&gt;&#39;, 0Ah
+	db	&#39;&lt;html xmlns=&#34;http://www.w3.org/1999/xhtml&#34; &#39;
+	db	&#39;xml.lang=&#34;en&#34; lang=&#34;en&#34;&gt;&#39;, 0Ah
+	db	&#39;&lt;head&gt;&#39;, 0Ah
+	db	&#39;&lt;title&gt;Web Environment&lt;/title&gt;&#39;, 0Ah
+	db	&#39;&lt;meta name=&#34;author&#34; content=&#34;G. Adam Stanislav&#34; /&gt;&#39;, 0Ah
+	db	&#39;&lt;/head&gt;&#39;, 0Ah, 0Ah
+	db	&#39;&lt;body bgcolor=&#34;#ffffff&#34; text=&#34;#000000&#34; link=&#34;#0000ff&#34; &#39;
+	db	&#39;vlink=&#34;#840084&#34; alink=&#34;#0000ff&#34;&gt;&#39;, 0Ah
+	db	&#39;&lt;div class=&#34;webvars&#34;&gt;&#39;, 0Ah
+	db	&#39;&lt;h1&gt;Web Environment&lt;/h1&gt;&#39;, 0Ah
+	db	&#39;&lt;p&gt;The following &lt;b&gt;environment variables&lt;/b&gt; are defined &#39;
+	db	&#39;on this web server:&lt;/p&gt;&#39;, 0Ah, 0Ah
+	db	&#39;&lt;table align=&#34;center&#34; width=&#34;80&#34; border=&#34;0&#34; cellpadding=&#34;10&#34; &#39;
+	db	&#39;cellspacing=&#34;0&#34; class=&#34;webvars&#34;&gt;&#39;, 0Ah
+httplen	equ	$-http
+left	db	&#39;&lt;tr&gt;&#39;, 0Ah
+	db	&#39;&lt;td class=&#34;name&#34;&gt;&lt;tt&gt;&#39;
+leftlen	equ	$-left
+middle	db	&#39;&lt;/tt&gt;&lt;/td&gt;&#39;, 0Ah
+	db	&#39;&lt;td class=&#34;value&#34;&gt;&lt;tt&gt;&lt;b&gt;&#39;
+midlen	equ	$-middle
+undef	db	&#39;&lt;i&gt;(undefined)&lt;/i&gt;&#39;
+undeflen	equ	$-undef
+right	db	&#39;&lt;/b&gt;&lt;/tt&gt;&lt;/td&gt;&#39;, 0Ah
+	db	&#39;&lt;/tr&gt;&#39;, 0Ah
+rightlen	equ	$-right
+wrap	db	&#39;&lt;/table&gt;&#39;, 0Ah
+	db	&#39;&lt;/div&gt;&#39;, 0Ah
+	db	&#39;&lt;/body&gt;&#39;, 0Ah
+	db	&#39;&lt;/html&gt;&#39;, 0Ah, 0Ah
+wraplen	equ	$-wrap
+
+section	.text
+global	_start
+_start:
+	; First, send out all the http and xhtml stuff that is
+	; needed before we start showing the environment
+	push	dword httplen
+	push	dword http
+	push	dword stdout
+	sys.write
+
+	; Now find how far on the stack the environment pointers
+	; are. We have 12 bytes we have pushed before &#34;argc&#34;
+	mov	eax, [esp+12]
+
+	; We need to remove the following from the stack:
+	;
+	;	The 12 bytes we pushed for sys.write
+	;	The  4 bytes of argc
+	;	The EAX*4 bytes of argv
+	;	The  4 bytes of the NULL after argv
+	;
+	; Total:
+	;	20 + eax * 4
+	;
+	; Because stack grows down, we need to ADD that many bytes
+	; to ESP.
+	lea	esp, [esp+20+eax*4]
+	cld		; This should already be the case, but let&#39;s be sure.
+
+	; Loop through the environment, printing it out
+.loop:
+	pop	edi
+	or	edi, edi	; Done yet?
+	je	near .wrap
+
+	; Print the left part of HTML
+	push	dword leftlen
+	push	dword left
+	push	dword stdout
+	sys.write
+
+	; It may be tempting to search for the &#39;=&#39; in the env string next.
+	; But it is possible there is no &#39;=&#39;, so we search for the
+	; terminating NUL first.
+	mov	esi, edi	; Save start of string
+	sub	ecx, ecx
+	not	ecx		; ECX = FFFFFFFF
+	sub	eax, eax
+repne	scasb
+	not	ecx		; ECX = string length + 1
+	mov	ebx, ecx	; Save it in EBX
+
+	; Now is the time to find &#39;=&#39;
+	mov	edi, esi	; Start of string
+	mov	al, &#39;=&#39;
+repne	scasb
+	not	ecx
+	add	ecx, ebx	; Length of name
+
+	push	ecx
+	push	esi
+	push	dword stdout
+	sys.write
+
+	; Print the middle part of HTML table code
+	push	dword midlen
+	push	dword middle
+	push	dword stdout
+	sys.write
+
+	; Find the length of the value
+	not	ecx
+	lea	ebx, [ebx+ecx-1]
+
+	; Print &#34;undefined&#34; if 0
+	or	ebx, ebx
+	jne	.value
+
+	mov	ebx, undeflen
+	mov	edi, undef
+
+.value:
+	push	ebx
+	push	edi
+	push	dword stdout
+	sys.write
+
+	; Print the right part of the table row
+	push	dword rightlen
+	push	dword right
+	push	dword stdout
+	sys.write
+
+	; Get rid of the 60 bytes we have pushed
+	add	esp, byte 60
+
+	; Get the next variable
+	jmp	.loop
+
+.wrap:
+	; Print the rest of HTML
+	push	dword wraplen
+	push	dword wrap
+	push	dword stdout
+	sys.write
+
+	; Return success
+	push	dword 0
+	sys.exit</pre></div></div><div class=paragraph><p>这段代码生成了一个1,396字节的可执行文件。大部分是数据，也就是我们需要发送的HTML标记。</p></div><div class=paragraph><p>像往常一样汇编和链接:</p></div><div class=listingblock><div class=content><pre class="rouge highlight"><code data-lang=shell>% nasm <span class=nt>-f</span> elf webvars.asm
+% ld <span class=nt>-s</span> <span class=nt>-o</span> webvars webvars.o</code></pre></div></div><div class=paragraph><p>要使用它，你需要上传 <span class=filename>webvars</span> 到你的web服务器。取决于你的web服务器是如何设置的，你可能必须将它存储在一个特殊的 <span class=filename>cgi-bin</span> 目录中，或者用 <span class=filename>.cgi</span> 扩展名重命名它。</p></div><div class=paragraph><p>然后，您需要使用浏览器查看它的输出。要在我的web服务器上查看它的输出，请访问 <a href=http://www.int80h.org/webvars/>http://www.int80h.org/webvars/</a>。如果对密码保护的web目录中的附加环境变量感到好奇，请使用 <code>asm</code> 和密码 <code>programmer</code> 的名称访问 <a href=http://www.int80h.org/private/>http://www.int80h.org/private/</a> 。</p></div></div></div></div></div><div class=sect1><h2 id=x86-files>A.11. 处理文件<a class=anchor href=#x86-files></a></h2><div class=sectionbody><div class=paragraph><p>我们已经做了一些基本的文件工作:我们知道如何打开和关闭它们，如何使用缓冲区读写它们。但是UNIX®在文件方面提供了更多的功能。我们将在本节中研究其中的一些内容，并最终提供一个不错的文件转换实用程序。</p></div><div class=paragraph><p>实际上，让我们从最后开始，即从文件转换实用程序开始。当我们从一开始就知道最终产品应该做什么时，编程总是会变得更容易。</p></div><div class=paragraph><p>我为UNIX®编写的第一个程序是 <a href=ftp://ftp.int80h.org/unix/tuc/>tuc</a> ，这是一个文本到UNIX®文件转换器。它将其他操作系统的文本文件转换为UNIX®文本文件。换句话说，它从不同类型的行结束符变为UNIX®的换行符约定。它将输出保存在另一个文件中。它还可以将UNIX®文本文件转换为DOS文本文件。</p></div><div class=paragraph><p>我已经广泛使用tuc，但总是只从其他操作系统转换到UNIX®，从没有其他方法。我一直希望它只是覆盖文件，而不是我必须将输出发送到另一个文件。大多数时候，我是这样使用它的:</p></div><div class=listingblock><div class=content><pre class="rouge highlight"><code data-lang=shell>% tuc myfile tempfile
+% <span class=nb>mv </span>tempfile myfile</code></pre></div></div><div class=paragraph><p>有一个ftuc会很好，也就是， <em>fast tuc</em>，并像这样使用它:</p></div><div class=listingblock><div class=content><pre class="rouge highlight"><code data-lang=shell>% ftuc myfile</code></pre></div></div><div class=paragraph><p>在本章中，我们将用汇编语言编写ftuc(最初的tuc是用C语言编写的)，并研究该过程中各种面向文件的内核服务。</p></div><div class=paragraph><p>乍一看，这样的文件转换非常简单:您所要做的就是去掉回车，对吗?</p></div><div class=paragraph><p>如果您的回答是肯定的，请再考虑一下:这种方法在大多数情况下都是有效的(至少对MS DOS文本文件是这样)，但偶尔会失败。</p></div><div class=paragraph><p>问题是，不是所有非UNIX®文本文件都以回车/换行序列结束行。有些使用回车而不换行。另一些则将几个空行组合成一个回车，后跟几个换行。等等。</p></div><div class=paragraph><p>文本文件转换器必须能够处理任何可能的行结束符:</p></div><div class=ulist><ul><li><p>回车/换行</p></li><li><p>回车</p></li><li><p>换行/回车</p></li><li><p>换行</p></li></ul></div><div class=paragraph><p>它还应该处理使用上述组合的文件(例如，回车后跟几个换行符)。</p></div><div class=sect2><h3 id=x86-finite-state-machine>A.11.1. 有限状态机<a class=anchor href=#x86-finite-state-machine></a></h3><div class=paragraph><p>这个问题很容易通过使用一种叫做 <em>有限状态机</em> 的技术来解决，这种技术最初是由数字电子电路的设计者开发的。 <em>有限状态机</em> 是一种数字电路，它的输出不仅依赖于它的输入，而且依赖于它之前的输入，即它的状态。微处理器是 <em>有限状态机</em> 的一个例子:我们的汇编语言代码被组装成机器语言，其中一些汇编语言代码产生一个字节的机器语言，而另一些则产生几个字节。当微处理器一个一个地从内存中获取字节时，其中一些字节只是改变了它的状态，而不是产生一些输出。当获取操作代码的所有字节时，微处理器产生一些输出，或改变寄存器的值，等等。</p></div><div class=paragraph><p>正因为如此，所有的软件本质上都是微处理器的状态指令序列。然而， <em>有限状态机</em> 的概念在软件设计中也很有用。</p></div><div class=paragraph><p>我们的文本文件转换器可以设计成具有三种可能状态的 <em>有限状态机</em> 。我们可以称它们为状态0-2，但如果我们给它们一个象征性的名字会更容易:</p></div><div class=ulist><ul><li><p>ordinary</p></li><li><p>cr</p></li><li><p>lf</p></li></ul></div><div class=paragraph><p>我们的程序将以正常状态启动。在此状态下，程序动作依赖于它的输入如下:</p></div><div class=ulist><ul><li><p>如果输入不是回车或换行，则直接将输入传递给输出。状态保持不变。</p></li><li><p>如果输入是回车，则状态变为cr，然后丢弃输入，即不输出。</p></li><li><p>如果输入是换行，则状态更改为lf。然后丢弃输入。</p></li></ul></div><div class=paragraph><p>当我们处于cr状态时，这是因为最后的输入是一个回车，这是未处理的。我们的软件在这种状态下做什么同样取决于当前输入:</p></div><div class=ulist><ul><li><p>如果输入不是回车或换行，输出换行，然后输出输入，然后将状态更改为普通。</p></li><li><p>如果输入是回车，则表示一行中收到了两个(或更多)回车。我们丢弃输入，输出换行，并保持状态不变。</p></li><li><p>如果输入是换行，则输出换行并将状态更改为普通。请注意，这与上面的第一种情况不同——如果我们试图合并它们，我们将输出两个换行符而不是一个。</p></li></ul></div><div class=paragraph><p>最后，在接收到之前没有回车的换行后，我们就进入了lf状态。当我们的文件已经是UNIX®格式时，或者当一行中的几行用一个回车后跟几个换行表示时，或者当行以换行/回车序列结束时，就会发生这种情况。下面是在这种状态下我们需要处理的输入:</p></div><div class=ulist><ul><li><p>如果输入不是回车或换行，则输出换行，然后输出输入，然后将状态更改为普通状态。这与接收相同类型的输入时的cr状态完全相同。</p></li><li><p>如果输入是回车，则丢弃输入，输出换行，然后将状态更改为普通状态。</p></li><li><p>如果输入是换行，则输出换行，并保持状态不变。</p></li></ul></div><div class=sect3><h4 id=x86-final-state>A.11.1.1. 最终的状态<a class=anchor href=#x86-final-state></a></h4><div class=paragraph><p>上面的 <em>有限状态机</em> 适用于整个文件，但有可能忽略最后一行结束。每当文件以单个回车或单个换行结束时，就会发生这种情况。我在编写tuc时没有想到它，只是发现它偶尔会去掉最后一行结尾。</p></div><div class=paragraph><p>通过在处理整个文件后检查状态，可以很容易地解决这个问题。如果状态不是普通的，我们只需要输出最后一次换行。</p></div><div class="admonitionblock note"><table><tbody><tr><td class=icon><i class="fa icon-note" title=Note></i></td><td class=content><div class=paragraph><p>
+既然我们已经将算法表示为 <em>有限状态机</em> ，我们就可以很容易地设计一个专用的数字电子电路(一个“芯片”)来为我们进行转换。当然，这样做比编写汇编语言程序要昂贵得多。</p></div></td></tr></tbody></table></div></div><div class=sect3><h4 id=x86-tuc-counter>A.11.1.2. 输出计数器<a class=anchor href=#x86-tuc-counter></a></h4><div class=paragraph><p>因为我们的文件转换程序可能会将两个字符合并为一个字符，所以我们需要使用输出计数器。我们将它初始化为 <code>0</code> ，并在每次向输出发送一个字符时增加它。在程序结束时，计数器会告诉我们需要将文件设置为多大。</p></div></div></div><div class=sect2><h3 id=x86-software-fsm>A.11.2. 在软件中实现 FSM<a class=anchor href=#x86-software-fsm></a></h3><div class=paragraph><p>使用 <em>有限状态机</em> 最困难的部分是分析问题并将其表示为 <em>有限状态机</em> 。完成这些后，软件几乎可以自己编写。
+</p></div><div class=paragraph><p>在高级语言中，例如C语言，有几种主要的方法。一种是使用 <code>switch</code> 语句来选择应该运行的函数。例如,</p></div><div class="literalblock programlisting"><div class=content><pre>switch (state) {
+	default:
+	case REGULAR:
+		regular(inputchar);
+		break;
+	case CR:
+		cr(inputchar);
+		break;
+	case LF:
+		lf(inputchar);
+		break;
+	}</pre></div></div><div class=paragraph><p>另一种方法是使用函数指针数组，就像这样:</p></div><div class="literalblock programlisting"><div class=content><pre>(output[state])(inputchar);</pre></div></div><div class=paragraph><p>还有一种方法是将 <code>state</code> 设为函数指针，指向适当的函数:</p></div><div class="literalblock programlisting"><div class=content><pre>(*state)(inputchar);</pre></div></div><div class=paragraph><p>这是我们将在程序中使用的方法，因为用汇编语言实现它非常容易，而且非常快。我们将简单地在 <code>EBX</code> 中保留正确程序的地址，然后发出:</p></div><div class="literalblock programlisting"><div class=content><pre>call	ebx</pre></div></div><div class=paragraph><p>这可能比在代码中硬编码地址更快，因为微处理器不需要从内存中获取地址——它已经存储在它的一个寄存器中。我说 <em>可能</em> 是因为有了现代微处理器的缓存，两种方式都一样快。</p></div></div><div class=sect2><h3 id=memory-mapped-files>A.11.3. 内存映射文件<a class=anchor href=#memory-mapped-files></a></h3><div class=paragraph><p>因为我们的程序在单个文件上工作，所以我们不能使用以前的方法，即从输入文件读取并向输出文件写入。</p></div><div class=paragraph><p>UNIX®允许我们将一个文件或文件的一部分映射到内存中。为此，我们首先需要使用适当的读/写标志打开文件。然后我们使用 <code>mmap</code> 系统调用将它映射到内存中。 <code>mmap</code> 的一个优点是它可以自动使用虚拟内存:我们可以将比可用物理内存更多的文件映射到内存中，但仍然可以通过常规的内存操作代码(如 <code>mov</code>, <code>lods</code> 和 <code>stos</code> )访问它。我们对文件的内存映像所做的任何更改都将由系统写入文件。我们甚至不需要保持文件是打开的:只要它保持映射，我们就可以对它进行读和写。</p></div><div class=paragraph><p>32位英特尔微处理器可以访问高达4gb的内存-物理或虚拟。FreeBSD系统允许我们使用最多一半的空间来进行文件映射。</p></div><div class=paragraph><p>为了简单起见，在本教程中，我们将只转换可以全部映射到内存中的文件。超过2g大小的文本文件可能不会太多。如果我们的程序遇到一个，它会简单地显示一条消息，建议我们使用原始的tuc。</p></div><div class=paragraph><p>如果您检查 <span class=filename>syscalls.master</span> 的副本，您将发现两个名为 <code>mmap</code> 的单独的系统调用。
+这是因为UNIX®的发展:有传统的 BSD <code>mmap</code>, syscall 71 。它被 POSIX® <code>mmap</code>, syscall 197所取代。FreeBSD系统同时支持这两种功能，因为较老的程序是使用最初的BSD版本编写的。但新的软件使用POSIX®版本，这是我们将使用的。</p></div><div class=paragraph><p><span class=filename>syscalls.master</span> 像这样列出POSIX®版本:</p></div><div class="literalblock programlisting"><div class=content><pre>197	STD	BSD	{ caddr_t mmap(caddr_t addr, size_t len, int prot, \
+			    int flags, int fd, long pad, off_t pos); }</pre></div></div><div class=paragraph><p>这与 <a href="https://www.freebsd.org/cgi/man.cgi?query=mmap&sektion=2&format=html">mmap(2)</a> 所说的稍有不同。这是因为 <a href="https://www.freebsd.org/cgi/man.cgi?query=mmap&sektion=2&format=html">mmap(2)</a> 描述了C版本。</p></div><div class=paragraph><p>区别在于 <code>long pad</code> 参数，这在C版本中是不存在的。然而，FreeBSD系统调用在 <code>push</code> 一个64位参数后添加一个32位pad。在本例中， <code>off_t</code> 是一个64位值。</p></div><div class=paragraph><p>当我们处理完一个内存映射文件时，我们使用 <code>munmap</code> 系统调用将其取消映射:</p></div><div class="admonitionblock tip"><table><tbody><tr><td class=icon><i class="fa icon-tip" title=Tip></i></td><td class=content><div class=paragraph><p>要深入了解 <code>mmap</code>，请参阅W. Richard Stevens的 <a href="http://www.int80h.org/cgi-bin/isbn?isbn=0130810819">《Unix网络编程》第2卷第12章</a>。</p></div></td></tr></tbody></table></div></div><div class=sect2><h3 id=x86-file-size>A.11.4. 确定文件大小<a class=anchor href=#x86-file-size></a></h3><div class=paragraph><p>因为我们需要告诉 <code>mmap</code> 将文件的多少字节映射到内存中，而且因为我们想映射整个文件，所以我们需要确定文件的大小。</p></div><div class=paragraph><p>我们可以使用 <code>fstat</code> 系统调用来获取系统可以提供给我们的关于打开文件的所有信息。这包括文件大小。</p></div><div class=paragraph><p>再次, <span class=filename>syscalls.master</span> 列出了两个版本的 <code>fstat</code> ，一个是传统版本(syscall 62)，一个是POSIX®版本(syscall 189)。当然，我们将使用POSIX®版本:</p></div><div class="literalblock programlisting"><div class=content><pre>189	STD	POSIX	{ int fstat(int fd, struct stat *sb); }</pre></div></div><div class=paragraph><p>这是一个非常直接的调用:我们将一个 <code>stat</code> 结构的地址和打开文件的描述符传递给它。它将填充 <code>stat</code> 结构的内容。</p></div><div class=paragraph><p>然而，我不得不说，我试图在 <code>.bss</code> 部分声明 <code>stat</code> 结构，而 <code>fstat</code> 不喜欢这样:它设置了进位标志，指示一个错误。在我更改代码以在堆栈上分配结构之后，一切都运行良好。</p></div></div><div class=sect2><h3 id=x86-ftruncate>A.11.5. 修改文件大小<a class=anchor href=#x86-ftruncate></a></h3><div class=paragraph><p>因为我们的程序可以将回车/换行序列组合成直线换行序列，所以我们的输出可能比输入小。但是，由于我们将输出放入读取输入的文件中，因此可能需要更改文件的大小。</p></div><div class=paragraph><p><code>ftruncate</code> 系统调用允许我们这样做。尽管它的名字有些误导性， <code>ftruncate</code> 系统调用可用于截断文件(使其更小)和增加它。</p></div><div class=paragraph><p>是的，我们会在 <span class=filename>syscalls.master</span> 中发现两个版本的 <code>ftruncate</code> ，一个老的130，一个新的201。我们将使用更新的:</p></div><div class="literalblock programlisting"><div class=content><pre>201	STD	BSD	{ int ftruncate(int fd, int pad, off_t length); }</pre></div></div><div class=paragraph><p>Please note that this one contains a <code>int pad</code> again.</p></div></div><div class=sect2><h3 id=x86-ftuc>A.11.6. ftuc<a class=anchor href=#x86-ftuc></a></h3><div class=paragraph><p>现在我们知道了编写ftuc所需的一切。我们首先在 <span class=filename>system.inc</span> 中添加一些新行。首先，在文件开头或接近开头的地方定义一些常量和结构:</p></div><div class="literalblock programlisting"><div class=content><pre>;;;;;;; open flags
+%define	O_RDONLY	0
+%define	O_WRONLY	1
+%define	O_RDWR	2
+
+;;;;;;; mmap flags
+%define	PROT_NONE	0
+%define	PROT_READ	1
+%define	PROT_WRITE	2
+%define	PROT_EXEC	4
+;;
+%define	MAP_SHARED	0001h
+%define	MAP_PRIVATE	0002h
+
+;;;;;;; stat structure
+struc	stat
+st_dev		resd	1	; = 0
+st_ino		resd	1	; = 4
+st_mode		resw	1	; = 8, size is 16 bits
+st_nlink	resw	1	; = 10, ditto
+st_uid		resd	1	; = 12
+st_gid		resd	1	; = 16
+st_rdev		resd	1	; = 20
+st_atime	resd	1	; = 24
+st_atimensec	resd	1	; = 28
+st_mtime	resd	1	; = 32
+st_mtimensec	resd	1	; = 36
+st_ctime	resd	1	; = 40
+st_ctimensec	resd	1	; = 44
+st_size		resd	2	; = 48, size is 64 bits
+st_blocks	resd	2	; = 56, ditto
+st_blksize	resd	1	; = 64
+st_flags	resd	1	; = 68
+st_gen		resd	1	; = 72
+st_lspare	resd	1	; = 76
+st_qspare	resd	4	; = 80
+endstruc</pre></div></div><div class=paragraph><p>我们定义了新的系统调用:</p></div><div class="literalblock programlisting"><div class=content><pre>%define	SYS_mmap	197
+%define	SYS_munmap	73
+%define	SYS_fstat	189
+%define	SYS_ftruncate	201</pre></div></div><div class=paragraph><p>我们添加宏来使用它们:</p></div><div class="literalblock programlisting"><div class=content><pre>%macro	sys.mmap	0
+	system	SYS_mmap
+%endmacro
+
+%macro	sys.munmap	0
+	system	SYS_munmap
+%endmacro
+
+%macro	sys.ftruncate	0
+	system	SYS_ftruncate
+%endmacro
+
+%macro	sys.fstat	0
+	system	SYS_fstat
+%endmacro</pre></div></div><div class=paragraph><p>这是我们的代码:</p></div><div class="literalblock programlisting"><div class=content><pre>;;;;;;; Fast Text-to-Unix Conversion (ftuc.asm) ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;
+;; Started:	21-Dec-2000
+;; Updated:	22-Dec-2000
+;;
+;; Copyright 2000 G. Adam Stanislav.
+;; All rights reserved.
+;;
+;;;;;;; v.1 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+%include	&#39;system.inc&#39;
+
+section	.data
+	db	&#39;Copyright 2000 G. Adam Stanislav.&#39;, 0Ah
+	db	&#39;All rights reserved.&#39;, 0Ah
+usg	db	&#39;Usage: ftuc filename&#39;, 0Ah
+usglen	equ	$-usg
+co	db	&#34;ftuc: Can&#39;t open file.&#34;, 0Ah
+colen	equ	$-co
+fae	db	&#39;ftuc: File access error.&#39;, 0Ah
+faelen	equ	$-fae
+ftl	db	&#39;ftuc: File too long, use regular tuc instead.&#39;, 0Ah
+ftllen	equ	$-ftl
+mae	db	&#39;ftuc: Memory allocation error.&#39;, 0Ah
+maelen	equ	$-mae
+
+section	.text
+
+align 4
+memerr:
+	push	dword maelen
+	push	dword mae
+	jmp	short error
+
+align 4
+toolong:
+	push	dword ftllen
+	push	dword ftl
+	jmp	short error
+
+align 4
+facerr:
+	push	dword faelen
+	push	dword fae
+	jmp	short error
+
+align 4
+cantopen:
+	push	dword colen
+	push	dword co
+	jmp	short error
+
+align 4
+usage:
+	push	dword usglen
+	push	dword usg
+
+error:
+	push	dword stderr
+	sys.write
+
+	push	dword 1
+	sys.exit
+
+align 4
+global	_start
+_start:
+	pop	eax		; argc
+	pop	eax		; program name
+	pop	ecx		; file to convert
+	jecxz	usage
+
+	pop	eax
+	or	eax, eax	; Too many arguments?
+	jne	usage
+
+	; Open the file
+	push	dword O_RDWR
+	push	ecx
+	sys.open
+	jc	cantopen
+
+	mov	ebp, eax	; Save fd
+
+	sub	esp, byte stat_size
+	mov	ebx, esp
+
+	; Find file size
+	push	ebx
+	push	ebp		; fd
+	sys.fstat
+	jc	facerr
+
+	mov	edx, [ebx + st_size + 4]
+
+	; File is too long if EDX != 0 ...
+	or	edx, edx
+	jne	near toolong
+	mov	ecx, [ebx + st_size]
+	; ... or if it is above 2 GB
+	or	ecx, ecx
+	js	near toolong
+
+	; Do nothing if the file is 0 bytes in size
+	jecxz	.quit
+
+	; Map the entire file in memory
+	push	edx
+	push	edx		; starting at offset 0
+	push	edx		; pad
+	push	ebp		; fd
+	push	dword MAP_SHARED
+	push	dword PROT_READ | PROT_WRITE
+	push	ecx		; entire file size
+	push	edx		; let system decide on the address
+	sys.mmap
+	jc	near memerr
+
+	mov	edi, eax
+	mov	esi, eax
+	push	ecx		; for SYS_munmap
+	push	edi
+
+	; Use EBX for state machine
+	mov	ebx, ordinary
+	mov	ah, 0Ah
+	cld
+
+.loop:
+	lodsb
+	call	ebx
+	loop	.loop
+
+	cmp	ebx, ordinary
+	je	.filesize
+
+	; Output final lf
+	mov	al, ah
+	stosb
+	inc	edx
+
+.filesize:
+	; truncate file to new size
+	push	dword 0		; high dword
+	push	edx		; low dword
+	push	eax		; pad
+	push	ebp
+	sys.ftruncate
+
+	; close it (ebp still pushed)
+	sys.close
+
+	add	esp, byte 16
+	sys.munmap
+
+.quit:
+	push	dword 0
+	sys.exit
+
+align 4
+ordinary:
+	cmp	al, 0Dh
+	je	.cr
+
+	cmp	al, ah
+	je	.lf
+
+	stosb
+	inc	edx
+	ret
+
+align 4
+.cr:
+	mov	ebx, cr
+	ret
+
+align 4
+.lf:
+	mov	ebx, lf
+	ret
+
+align 4
+cr:
+	cmp	al, 0Dh
+	je	.cr
+
+	cmp	al, ah
+	je	.lf
+
+	xchg	al, ah
+	stosb
+	inc	edx
+
+	xchg	al, ah
+	; fall through
+
+.lf:
+	stosb
+	inc	edx
+	mov	ebx, ordinary
+	ret
+
+align 4
+.cr:
+	mov	al, ah
+	stosb
+	inc	edx
+	ret
+
+align 4
+lf:
+	cmp	al, ah
+	je	.lf
+
+	cmp	al, 0Dh
+	je	.cr
+
+	xchg	al, ah
+	stosb
+	inc	edx
+
+	xchg	al, ah
+	stosb
+	inc	edx
+	mov	ebx, ordinary
+	ret
+
+align 4
+.cr:
+	mov	ebx, ordinary
+	mov	al, ah
+	; fall through
+
+.lf:
+	stosb
+	inc	edx
+	ret</pre></div></div><div class="admonitionblock warning"><table><tbody><tr><td class=icon><i class="fa icon-warning" title=Warning></i></td><td class=content><div class=paragraph><p>不要在存储在MS-DOS®或Windows®格式化磁盘上的文件上使用此程序。当在这些挂载在FreeBSD下的驱动器上使用 <code>mmap</code> 时，FreeBSD代码中似乎有一个微妙的错误:如果文件超过了一定的大小， <code>mmap</code> 将用0填充内存，然后将它们复制到文件，覆盖其内容。</p></div></td></tr></tbody></table></div></div></div></div><div class=sect1><h2 id=x86-one-pointed-mind>A.12. One-Pointed Mind<a class=anchor href=#x86-one-pointed-mind></a></h2><div class=sectionbody><div class=paragraph><p>作为一名禅学学生，我喜欢一种思想:一次只做一件事，并做好它。</p></div><div class=paragraph><p>实际上，这正是UNIX®工作的方式。一个典型的Windows®应用程序试图做所有你能想到的事情(因此，漏洞百出)，而一个典型的UNIX®程序只做一件事，而且它做得很好。</p></div><div class=paragraph><p>典型的UNIX®用户通过编写shell脚本组装自己的应用程序，该脚本通过将一个程序的输出连接到另一个程序的输入，将各种现有程序组合在一起。</p></div><div class=paragraph><p>在编写您自己的UNIX®软件时，最好了解需要解决的问题的哪些部分可以由现有的程序处理，然后只针对您没有现有解决方案的那部分问题编写您自己的程序。</p></div><div class=sect2><h3 id=x86-csv>A.12.1. CSV<a class=anchor href=#x86-csv></a></h3><div class=paragraph><p>我将用我最近遇到的一个具体的现实例子来说明这一原则:</p></div><div class=paragraph><p>我需要从一个网站下载的数据库中提取每条记录的第11个字段。数据库是一个CSV文件，即 <em>逗号分隔值</em>的列表。这是在使用不同数据库软件的人们之间共享数据的相当标准的格式。</p></div><div class=paragraph><p>文件的第一行包含用逗号分隔的各种字段的列表。文件的其余部分包含逐行列出的数据，值之间用逗号分隔。</p></div><div class=paragraph><p>我尝试了awk，使用逗号作为分隔符。但是因为有几行包含了一个引号，awk从这些行中提取了错误的字段。</p></div><div class=paragraph><p>因此，我需要编写自己的软件从CSV文件中提取第11个字段。然而，遵循UNIX®精神，我只需要编写一个简单的过滤器，它将执行以下操作:</p></div><div class=ulist><ul><li><p>从文件中删除第一行;</p></li><li><p>将所有不加引号的逗号改为不同的字符;</p></li><li><p>去掉所有的引号。</p></li></ul></div><div class=paragraph><p>严格地说，我可以使用sed从文件中删除第一行，但是在我自己的程序中这样做非常容易，所以我决定这样做并减小管道的大小。</p></div><div class=paragraph><p>无论如何，写这样一个程序花了我大约20分钟。编写一个从CSV文件中提取第11个字段的程序将花费更长的时间，而且我不能重用它来从其他数据库中提取其他字段。</p></div><div class=paragraph><p>这一次我决定让它比典型的教程程序做更多的工作:</p></div><div class=ulist><ul><li><p>它解析命令行中的选项;</p></li><li><p>如果发现错误的参数，它会显示正确的用法;</p></li><li><p>它会产生有意义的错误消息。</p></li></ul></div><div class=paragraph><p>以下是它的使用信息:</p></div><div class=listingblock><div class=content><pre class="rouge highlight"><code data-lang=shell>Usage: csv <span class=o>[</span><span class=nt>-t</span>&lt;delim&gt;] <span class=o>[</span><span class=nt>-c</span>&lt;comma&gt;] <span class=o>[</span><span class=nt>-p</span><span class=o>]</span> <span class=o>[</span><span class=nt>-o</span> &lt;outfile&gt;] <span class=o>[</span><span class=nt>-i</span> &lt;infile&gt;]</code></pre></div></div><div class=paragraph><p>所有参数都是可选的，可以以任何顺序出现。</p></div><div class=paragraph><p><code>-t</code> 参数声明用什么替换逗号。这里的 <code>tab</code> 是默认的。例如, <code>-t;</code> ;将所有未加引号的逗号替换为分号。</p></div><div class=paragraph><p>我不需要 <code>-c</code> 选项，但它将来可能会派上用场。它允许我声明我想用其他东西替换逗号以外的字符。例如， <code>-c@</code> 将替换所有的@符号(如果您想将电子邮件地址列表拆分为它们的用户名和域，则非常有用)。</p></div><div class=paragraph><p><code>-p</code> 选项保留第一行，也就是说，它不会删除它。默认情况下，我们删除第一行，因为在CSV文件中，它包含字段名而不是数据。
+
+</p></div><div class=paragraph><p>使用 <code>-i</code> 和 <code>-o</code> 选项可以指定输入和输出文件。默认是 <span class=filename>stdin</span> 和 <span class=filename>stdout</span> ，所以这是一个普通的UNIX®过滤器。</p></div><div class=paragraph><p>我确保 <code>-i filename</code> 和 <code>-ifilename</code> 都被接受。我还确保只能指定一个输入文件和一个输出文件。</p></div><div class=paragraph><p>为了得到每个记录的第11个字段，我现在可以做:</p></div><div class=listingblock><div class=content><pre class="rouge highlight"><code data-lang=shell>% csv <span class=s1>&#39;-t;&#39;</span> data.csv | <span class=nb>awk</span> <span class=s1>&#39;-F;&#39;</span> <span class=s1>&#39;{print $11}&#39;</span></code></pre></div></div><div class=paragraph><p>代码将选项(文件描述符除外)存储在 <code>EDX</code> 中: <code>DH</code> 中的逗号， <code>DL</code> 中的新分隔符，以及 <code>EDX</code> 最高位中的 <code>-p</code> 选项标志，因此检查其符号将让我们快速决定要做什么。</p></div><div class=paragraph><p>下面是代码:</p></div><div class="literalblock programlisting"><div class=content><pre>;;;;;;; csv.asm ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;
+; Convert a comma-separated file to a something-else separated file.
+;
+; Started:	31-May-2001
+; Updated:	 1-Jun-2001
+;
+; Copyright (c) 2001 G. Adam Stanislav
+; All rights reserved.
+;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+%include	&#39;system.inc&#39;
+
+%define	BUFSIZE	2048
+
+section	.data
+fd.in	dd	stdin
+fd.out	dd	stdout
+usg	db	&#39;Usage: csv [-t&lt;delim&gt;] [-c&lt;comma&gt;] [-p] [-o &lt;outfile&gt;] [-i &lt;infile&gt;]&#39;, 0Ah
+usglen	equ	$-usg
+iemsg	db	&#34;csv: Can&#39;t open input file&#34;, 0Ah
+iemlen	equ	$-iemsg
+oemsg	db	&#34;csv: Can&#39;t create output file&#34;, 0Ah
+oemlen	equ	$-oemsg
+
+section .bss
+ibuffer	resb	BUFSIZE
+obuffer	resb	BUFSIZE
+
+section	.text
+align 4
+ierr:
+	push	dword iemlen
+	push	dword iemsg
+	push	dword stderr
+	sys.write
+	push	dword 1		; return failure
+	sys.exit
+
+align 4
+oerr:
+	push	dword oemlen
+	push	dword oemsg
+	push	dword stderr
+	sys.write
+	push	dword 2
+	sys.exit
+
+align 4
+usage:
+	push	dword usglen
+	push	dword usg
+	push	dword stderr
+	sys.write
+	push	dword 3
+	sys.exit
+
+align 4
+global	_start
+_start:
+	add	esp, byte 8	; discard argc and argv[0]
+	mov	edx, (&#39;,&#39; &lt;&lt; 8) | 9
+
+.arg:
+	pop	ecx
+	or	ecx, ecx
+	je	near .init		; no more arguments
+
+	; ECX contains the pointer to an argument
+	cmp	byte [ecx], &#39;-&#39;
+	jne	usage
+
+	inc	ecx
+	mov	ax, [ecx]
+
+.o:
+	cmp	al, &#39;o&#39;
+	jne	.i
+
+	; Make sure we are not asked for the output file twice
+	cmp	dword [fd.out], stdout
+	jne	usage
+
+	; Find the path to output file - it is either at [ECX+1],
+	; i.e., -ofile --
+	; or in the next argument,
+	; i.e., -o file
+
+	inc	ecx
+	or	ah, ah
+	jne	.openoutput
+	pop	ecx
+	jecxz	usage
+
+.openoutput:
+	push	dword 420	; file mode (644 octal)
+	push	dword 0200h | 0400h | 01h
+	; O_CREAT | O_TRUNC | O_WRONLY
+	push	ecx
+	sys.open
+	jc	near oerr
+
+	add	esp, byte 12
+	mov	[fd.out], eax
+	jmp	short .arg
+
+.i:
+	cmp	al, &#39;i&#39;
+	jne	.p
+
+	; Make sure we are not asked twice
+	cmp	dword [fd.in], stdin
+	jne	near usage
+
+	; Find the path to the input file
+	inc	ecx
+	or	ah, ah
+	jne	.openinput
+	pop	ecx
+	or	ecx, ecx
+	je near usage
+
+.openinput:
+	push	dword 0		; O_RDONLY
+	push	ecx
+	sys.open
+	jc	near ierr		; open failed
+
+	add	esp, byte 8
+	mov	[fd.in], eax
+	jmp	.arg
+
+.p:
+	cmp	al, &#39;p&#39;
+	jne	.t
+	or	ah, ah
+	jne	near usage
+	or	edx, 1 &lt;&lt; 31
+	jmp	.arg
+
+.t:
+	cmp	al, &#39;t&#39;		; redefine output delimiter
+	jne	.c
+	or	ah, ah
+	je	near usage
+	mov	dl, ah
+	jmp	.arg
+
+.c:
+	cmp	al, &#39;c&#39;
+	jne	near usage
+	or	ah, ah
+	je	near usage
+	mov	dh, ah
+	jmp	.arg
+
+align 4
+.init:
+	sub	eax, eax
+	sub	ebx, ebx
+	sub	ecx, ecx
+	mov	edi, obuffer
+
+	; See if we are to preserve the first line
+	or	edx, edx
+	js	.loop
+
+.firstline:
+	; get rid of the first line
+	call	getchar
+	cmp	al, 0Ah
+	jne	.firstline
+
+.loop:
+	; read a byte from stdin
+	call	getchar
+
+	; is it a comma (or whatever the user asked for)?
+	cmp	al, dh
+	jne	.quote
+
+	; Replace the comma with a tab (or whatever the user wants)
+	mov	al, dl
+
+.put:
+	call	putchar
+	jmp	short .loop
+
+.quote:
+	cmp	al, &#39;&#34;&#39;
+	jne	.put
+
+	; Print everything until you get another quote or EOL. If it
+	; is a quote, skip it. If it is EOL, print it.
+.qloop:
+	call	getchar
+	cmp	al, &#39;&#34;&#39;
+	je	.loop
+
+	cmp	al, 0Ah
+	je	.put
+
+	call	putchar
+	jmp	short .qloop
+
+align 4
+getchar:
+	or	ebx, ebx
+	jne	.fetch
+
+	call	read
+
+.fetch:
+	lodsb
+	dec	ebx
+	ret
+
+read:
+	jecxz	.read
+	call	write
+
+.read:
+	push	dword BUFSIZE
+	mov	esi, ibuffer
+	push	esi
+	push	dword [fd.in]
+	sys.read
+	add	esp, byte 12
+	mov	ebx, eax
+	or	eax, eax
+	je	.done
+	sub	eax, eax
+	ret
+
+align 4
+.done:
+	call	write		; flush output buffer
+
+	; close files
+	push	dword [fd.in]
+	sys.close
+
+	push	dword [fd.out]
+	sys.close
+
+	; return success
+	push	dword 0
+	sys.exit
+
+align 4
+putchar:
+	stosb
+	inc	ecx
+	cmp	ecx, BUFSIZE
+	je	write
+	ret
+
+align 4
+write:
+	jecxz	.ret	; nothing to write
+	sub	edi, ecx	; start of buffer
+	push	ecx
+	push	edi
+	push	dword [fd.out]
+	sys.write
+	add	esp, byte 12
+	sub	eax, eax
+	sub	ecx, ecx	; buffer is empty now
+.ret:
+	ret</pre></div></div><div class=paragraph><p>大部分都来自于 <span class=filename>hex.asm</span> 。但是有一个重要的区别:我不再在输出换行时调用 <code>write</code> 。然而，代码可以交互式地使用。</p></div><div class=paragraph><p>自从我开始写这一章以来，我已经找到了一个更好的交互式问题解决方案。我想确保每一行只在需要的时候单独打印出来。毕竟，当以非交互方式使用时，没有必要清空每一行。</p></div><div class=paragraph><p>我现在使用的新解决方案是每次发现输入缓冲区为空时调用 <code>write</code> 。这样，当在交互模式下运行时，程序从用户的键盘读取一行，处理它，并看到它的输入缓冲区为空。它刷新输出并读取下一行。</p></div><div class=sect3><h4 id=x86-buffered-dark-side>A.12.1.1. 缓冲的阴暗面<a class=anchor href=#x86-buffered-dark-side></a></h4><div class=paragraph><p>这种变化防止了在非常特定的情况下发生神秘锁定。我把它称为 <em>缓冲的阴暗面</em>，主要是因为它呈现了一种不太明显的危险。</p></div><div class=paragraph><p>对于上面的csv这样的程序，这种情况不太可能发生，因此让我们考虑另一个过滤器:在本例中，我们期望输入是表示颜色值的原始数据，例如像素的 <em>red</em>, <em>green</em> 和 <em>blue</em> 强度。输出是输入的负数。</p></div><div class=paragraph><p>编写这样的过滤器非常简单。它的大部分看起来就像我们到目前为止写的所有其他过滤器，所以我只会展示它的内部循环:</p></div><div class="literalblock programlisting"><div class=content><pre>.loop:
+	call	getchar
+	not	al		; Create a negative
+	call	putchar
+	jmp	short .loop</pre></div></div><div class=paragraph><p>因为这个过滤器处理的是原始数据，所以不太可能以交互方式使用。</p></div><div class=paragraph><p>但它可以被图像处理软件调用。而且，除非它在每次调用 <code>read</code> 之前调用 <code>write</code> ，否则很可能会被锁定。</p></div><div class=paragraph><p>以下是可能发生的情况:</p></div><div class="olist arabic procedure"><ol class=arabic><li><p>图像编辑器将使用C函数 <code>popen()</code> 加载我们的过滤器。</p></li><li><p>它将从位图或位图中读取第一行像素。</p></li><li><p>它将把第一行像素写入到通向过滤器的 <code>fd.in</code> 的 <em>pipe</em> 中。</p></li><li><p>我们的过滤器将从输入中读取每个像素，将其转换为负数，并将其写入输出缓冲区。</p></li><li><p>我们的过滤器将调用 <code>getchar</code> 来获取下一个像素。</p></li><li><p><code>getchar</code> 会找到一个空的输入缓冲区，所以它会调用 <code>read</code> 。</p></li><li><p><code>read</code> 将调用 <code>SYS_read</code> 系统调用。</p></li><li><p><em>kernel</em> 将暂停我们的过滤器，直到图像编辑器向管道发送更多数据。</p></li><li><p>图像编辑器将从连接到过滤器的 <code>fd.out</code> 的另一个管道中读取，因此它可以在向我们发送输入的第二行 <em>之前</em> 设置输出图像的第一行。</p></li><li><p><em>kernel</em> 将挂起图像编辑器，直到从过滤器接收到一些输出，以便将输出传递给图像编辑器。</p></li></ol></div><div class=paragraph><p>此时，过滤器等待图像编辑器向它发送更多要处理的数据，而图像编辑器则等待过滤器将第一行的处理结果发送给它。但是结果位于我们的输出缓冲区中。</p></div><div class=paragraph><p>滤镜和图像编辑器将永远互相等待(或者，至少直到它们被杀死)。我们的软件刚刚进入 <a href=../secure/index.html#secure-race-conditions>race condition</a>。</p></div><div class=paragraph><p>如果过滤器在向 <em>kernel</em> 请求更多输入数据 <em>之前</em> 刷新其输出缓冲区，则不存在此问题。</p></div></div></div></div></div><div class=sect1><h2 id=x86-fpu>A.13. 使用 FPU<a class=anchor href=#x86-fpu></a></h2><div class=sectionbody><div class=paragraph><p>奇怪的是，大多数汇编语言文献甚至没有提到 FPU （ <em>浮点单元</em> )的存在，更不用说讨论如何对其进行编程了。</p></div><div class=paragraph><p>然而，当我们通过做一些只能用汇编语言完成的事情来创建高度优化的FPU代码时，汇编语言 <em>才会</em> 更耀眼。</p></div><div class=sect2><h3 id=x86-fpu-organization>A.13.1. FPU 的组织<a class=anchor href=#x86-fpu-organization></a></h3><div class=paragraph><p>FPU由8个80位浮点寄存器组成。它们以堆栈的方式组织——您可以将一个值 <code>push</code> TOS (<em>堆栈顶部</em>) ，也可以 <code>pop</code> 它。</p></div><div class=paragraph><p>也就是说，汇编语言操作代码不是 <code>push</code> 和 <code>pop</code> ，因为它们已经被占用了。</p></div><div class=paragraph><p>可以使用 <code>fld</code>, <code>fild</code> 和 <code>fbld</code> 将值 <code>push</code> TOS。其他几个操作代码允许您将许多公共 <em>常量</em> (如 <em>pi</em> ) <code>push</code> 到TOS上。</p></div><div class=paragraph><p>类似地，可以通过使用 <code>fst</code>, <code>fstp</code>, <code>fist</code>, <code>fistp</code> 和 <code>fbstp</code> <code>pop</code>
+值。实际上，只有以 <em>p</em> 结尾的操作代码会 <code>pop</code> 值，其余的操作代码会将其 <code>store</code> 在其他地方，而不会从TOS中删除它。</p></div><div class=paragraph><p>我们可以在TOS和计算机内存之间以32位、64位或80位 <em>real</em>、16位、32位或64位 <em>integer</em>或80位 <em>packed decimal</em> 的形式传输数据。</p></div><div class=paragraph><p>80位 <em>packed decimal</em> 是 <em>二进制编码十进制</em> 的一种特殊情况，在数据的ASCII表示和FPU内部数据之间进行转换时非常方便。它允许我们使用18位有效数字。</p></div><div class=paragraph><p>无论我们如何在内存中表示数据，FPU总是在它的寄存器中以80位的 <em>real</em> 格式存储数据。</p></div><div class=paragraph><p>它的内部精度至少是19位十进制数字，因此即使我们选择以完整的18位精度的ASCII显示结果，我们仍然显示正确的结果。</p></div><div class=paragraph><p>我们可以对TOS执行数学运算:我们可以计算它的 <em>sine</em> 值，我们可以 <em>scale</em> 它(即，我们可以将它乘以或除以2的幂)，我们可以计算它以2为底的 <em>logarithm</em> ，以及许多其他事情。</p></div><div class=paragraph><p>我们还可以用它 <em>multiply</em> 或 <em>divide</em> 它， <em>add</em> 它或 <em>subtract</em> 它，任何FPU寄存器(包括它自己)。</p></div><div class=paragraph><p>TOS的官方Intel操作代码是 <code>st</code> ，对于 <em>寄存器</em> <code>st(0)</code>-<code>st(7)</code> 。
+<code>st</code> 和 <code>st(0)</code> 指向同一个寄存器。</p></div><div class=paragraph><p>不管出于什么原因，nasm的最初作者决定使用不同的操作代码，即 <code>st0</code>-<code>st7</code> 。换句话说，没有括号，TOS总是 <code>st0</code> ，而不是 <code>st</code>。</p></div><div class=sect3><h4 id=x86-fpu-packed-decimal>A.13.1.1. 打包的十进制格式<a class=anchor href=#x86-fpu-packed-decimal></a></h4><div class=paragraph><p><em>packed decimal</em> 格式使用10字节(80位)的内存来表示18位。这里表示的数字总是 <em>integer</em>。</p></div><div class="admonitionblock tip"><table><tbody><tr><td class=icon><i class="fa icon-tip" title=Tip></i></td><td class=content><div class=paragraph><p>
+您可以使用它先将TOS乘以10的幂来得到小数点后几位。</p></div></td></tr></tbody></table></div><div class=paragraph><p>最高字节(字节9)的最高位是 <em>符号位</em>:如果设置了它，则该数字为 <em>negative</em>，否则为 <em>positive</em>。此字节的其余位不使用/忽略。</p></div><div class=paragraph><p>其余9个字节存储18位数字:每个字节2位。</p></div><div class=paragraph><p><em>较高的有效数字</em> 存储在高 <em>nibble</em> 位(4位)中， <em>较低的有效数字</em> 存储在低 <em>nibble</em> 位中。</p></div><div class=paragraph><p>也就是说，你可能会认为 <code>-1234567</code> 会像这样存储在内存中(使用十六进制表示法):</p></div><div class="literalblock programlisting"><div class=content><pre>80 00 00 00 00 00 01 23 45 67</pre></div></div><div class=paragraph><p>唉，它不是!和英特尔的其他产品一样，即使是 <em>packed decimal</em> 也是 <em>little-endian</em> 。</p></div><div class=paragraph><p>这意味着我们的 <code>-1234567</code> 是这样存储的:</p></div><div class="literalblock programlisting"><div class=content><pre>67 45 23 01 00 00 00 00 00 80</pre></div></div><div class=paragraph><p>记住这一点，否则你会绝望地扯你的头发!</p></div><div class="admonitionblock note"><table><tbody><tr><td class=icon><i class="fa icon-note" title=Note></i></td><td class=content><div class=paragraph><p>如果你能找到的话，这本书是 Richard Startz 的 <a href=http://www.amazon.com/exec/obidos/ASIN/013246604X/whizkidtechnomag>8087/80287/80387 for the IBM PC & Compatibles</a> 。尽管它似乎确实把 <em>packed decimal</em> 的小端存储作为理所当然的事实。我不是在开玩笑，在我想到我应该对这种类型的数据尝试小端序 <em>之前</em> ，我已经绝望地试图找出下面显示的过滤器的问题。</p></div></td></tr></tbody></table></div></div></div><div class=sect2><h3 id=x86-pinhole-photography>A.13.2. 针孔摄影之旅<a class=anchor href=#x86-pinhole-photography></a></h3><div class=paragraph><p>要编写有意义的软件，我们不仅要了解我们的编程工具，还要了解我们为之开发软件的领域。</p></div><div class=paragraph><p>我们的下一个滤镜将帮助我们每当我们想建立一个 <em>针孔相机</em> ，所以，我们需要一些背景在 <em>针孔摄影</em> 之前，我们可以继续。</p></div><div class=sect3><h4 id=x86-camera>A.13.2.1. 相机<a class=anchor href=#x86-camera></a></h4><div class=paragraph><p>用最简单的方式来描述相机，就是用某种防光材料围起来的一些空间，外壳上有一个小洞。</p></div><div class=paragraph><p>外壳通常是坚固的(如盒子)，但有时是灵活的(如风箱)。相机里面很暗。然而，这个洞让光线通过一个点进入(虽然在某些情况下可能有几个点)。这些光线形成了一个图像，代表了相机外洞前的任何东西。</p></div><div class=paragraph><p>如果把一些感光材料(如胶片)放在相机里面，它就能捕捉到图像。</p></div><div class=paragraph><p>这个孔通常包含一个透镜，或透镜组件，通常称为 <em>物镜</em> 。</p></div></div><div class=sect3><h4 id=x86-the-pinhole>A.13.2.2. 针孔<a class=anchor href=#x86-the-pinhole></a></h4><div class=paragraph><p>但是，严格地说，镜头是不必要的:最初的相机没有镜头，而是一个 <em>针孔</em> 。即使在今天， <em>针孔</em> 也被用作研究相机工作原理的工具，并被用来获得一种特殊的图像。</p></div><div class=paragraph><p>由 <em>针孔</em> 产生的图像都是同样清晰的。或 <em>模糊</em> 。针孔有一个理想的大小:如果针孔大一点或小一点，图像就会失去清晰度。</p></div></div><div class=sect3><h4 id=x86-focal-length>A.13.2.3. 焦距<a class=anchor href=#x86-focal-length></a></h4><div class=paragraph><p>这个理想的针孔直径是 <em>焦距</em> 平方根的函数，焦距是针孔到薄膜的距离。</p></div><div class="literalblock programlisting"><div class=content><pre>D = PC * sqrt(FL)</pre></div></div><div class=paragraph><p>其中 <code>D</code> 为针孔的理想直径， <code>FL</code> 为焦距， <code>PC</code> 为针孔常数。据杰·本德(Jay Bender)说，它的值是 <code>0.04</code> ，而肯尼斯·康纳斯(Kenneth Connors)则认为是 <code>0.037</code> 。其他人则提出了其他价值。另外，这个值只适用于日光:其他类型的光需要不同的常数，其值只能通过实验来确定。</p></div></div><div class=sect3><h4 id=x86-f-number>A.13.2.4. 焦距比数<a class=anchor href=#x86-f-number></a></h4><div class=paragraph><p>f值是衡量到达薄膜的光线的一个非常有用的指标。一个测光计可以确定，例如，曝光一个特定灵敏度为5.6 mkay的胶卷需要持续1/1000秒的曝光时间。</p></div><div class=paragraph><p>不管它是一个35毫米的相机，还是一个6x9厘米的相机，等等。只要我们知道f值，就能确定适当的曝光量。</p></div><div class=paragraph><p>f数很容易计算:</p></div><div class="literalblock programlisting"><div class=content><pre>F = FL / D</pre></div></div><div class=paragraph><p>换句话说，f数等于焦距除以针孔直径。这也意味着更高的f值要么意味着更小的针孔，要么意味着更大的焦距，或者两者兼有。这就意味着，f值越高，曝光时间就越长。</p></div><div class=paragraph><p>此外，虽然针孔直径和焦距是一维的测量，但薄膜和针孔都是二维的。这意味着，如果你测量 f-数 <code>A</code> 值的曝光量为 <code>t</code> ，那么 f-数 <code>B</code> 值的曝光量为:</p></div><div class="literalblock programlisting"><div class=content><pre>t * (B / A)²</pre></div></div></div><div class=sect3><h4 id=x86-normalized-f-number>A.13.2.5. 规范化的焦距比数<a class=anchor href=#x86-normalized-f-number></a></h4><div class=paragraph><p>虽然许多现代相机可以很顺利地逐渐改变针孔的直径，从而改变f值，但情况并非总是如此。</p></div><div class=paragraph><p>为了允许不同的f值，相机通常包含一个金属板，在上面钻了几个不同大小的孔。</p></div><div class=paragraph><p>它们的尺寸是根据上面的公式来选择的，这样产生的f数就是所有相机上使用的标准f数之一。例如，我拥有的一台非常老的柯达Duaflex IV相机有三个这样的孔，分别是f号8、11和16。</p></div><div class=paragraph><p>最近制造的相机可能提供2.8,4,5.6,8,11,16,22和32(以及其他)的f值。这些数字不是随意选择的:它们都是根号2的幂，尽管它们可能是四舍五入的。</p></div></div><div class=sect3><h4 id=x86-f-stop>A.13.2.6. The F-制光圈<a class=anchor href=#x86-f-stop></a></h4><div class=paragraph><p>一个典型的相机是这样设计的，设置任何一个标准化的f值都会改变表盘的感觉。它会自然地 <em>停</em> 在那个位置。正因为如此，这些刻度盘的位置被称为f位。
+</p></div><div class=paragraph><p>因为每一站的f值都是根号2的幂，所以将表盘移动一站，适当曝光所需的光量就会翻倍。移动两站，所需曝光量将翻四倍。将表盘移动3位需要增加8倍的曝光，等等。</p></div></div></div><div class=sect2><h3 id=x86-pinhole-software>A.13.3. 针孔软件设计<a class=anchor href=#x86-pinhole-software></a></h3><div class=paragraph><p>现在我们已经准备好决定我们到底想让针孔软件做什么。</p></div><div class=sect3><h4 id=xpinhole-processing-input>A.13.3.1. 处理程序输入<a class=anchor href=#xpinhole-processing-input></a></h4><div class=paragraph><p>由于它的主要目的是帮助我们设计一个工作针孔相机，我们将使用 <em>焦距</em> 作为程序的输入。这是我们不用软件就能确定的:合适的焦距是由胶片的大小和拍摄“常规”照片、广角照片或长焦照片的需要决定的。</p></div><div class=paragraph><p>到目前为止，我们编写的大多数程序都使用单个字符或字节作为输入:十六进制程序将单个字节转换为十六进制数，csv程序允许字符通过，或删除它，或将其更改为不同的字符，等等。</p></div><div class=paragraph><p>其中一个程序ftuc使用状态机一次最多考虑两个输入字节。</p></div><div class=paragraph><p>但是我们的针孔程序不能只处理单个字符，它必须处理更大的语法单元。</p></div><div class=paragraph><p>例如，如果我们想让程序计算在 <code>100 mm</code>, <code>150 mm</code> 和 <code>210 mm</code> 焦距下的针孔直径(以及其他值，我们将在后面讨论)，我们可能想输入如下内容:</p></div><div class=listingblock><div class=content><pre class="rouge highlight"><code data-lang=shell> 100, 150, 210</code></pre></div></div><div class=paragraph><p>我们的程序一次需要考虑多个字节的输入。当它看到第一个 <code>1</code> 时，它必须理解它看到的是一个十进制数的第一个数字。当它看到一个 <code>0</code> 和另一个 <code>0</code> 时，它必须知道它看到的是相同数字的更多数字。</p></div><div class=paragraph><p>当它遇到第一个逗号时，它必须知道它不再接收第一个数字的数字。它必须能够将第一个数字的数字转换为 <code>100</code> 的值。并将第二个数字的数字转换为 <code>150</code> 。当然，第三个数字的数字变成了 <code>210</code> 。</p></div><div class=paragraph><p>我们需要决定接受什么分隔符:输入的数字必须用逗号分隔吗?如果是这样，我们如何处理两个被其他东西隔开的数?</p></div><div class=paragraph><p>就我个人而言，我喜欢保持简单。要么是数字，我处理它。或者它不是一个数字，所以我丢弃它。我不喜欢明明是多余的字符，电脑却 <em>抱怨</em> 我输入了多余的字符。咄!</p></div><div class=paragraph><p>此外，它让我打破了单调的计算和键入查询，而不仅仅是一个数字:</p></div><div class=listingblock><div class=content><pre class="rouge highlight"><code data-lang=shell>What is the best pinhole diameter <span class=k>for </span>the
+	    focal length of 150?</code></pre></div></div><div class=paragraph><p>电脑没有理由吐出一堆抱怨:</p></div><div class=listingblock><div class=content><pre class="rouge highlight"><code data-lang=shell>Syntax error: What
+Syntax error: is
+Syntax error: the
+Syntax error: best</code></pre></div></div><div class=paragraph><p>等等等等等等</p></div><div class=paragraph><p>其次，我喜欢用 <code>#</code> 字符表示扩展到行尾的注释的开始。这并不需要太多的编码工作，并且允许我将软件的输入文件视为可执行脚本。
+</p></div><div class=paragraph><p>在我们的例子中，我们还需要决定输入的单位是什么:我们选择 <em>毫米</em> ，因为这是大多数摄影师测量焦距的方法。</p></div><div class=paragraph><p>最后，我们需要决定是否允许使用小数点(在这种情况下，我们还必须考虑到世界上很多地方都使用十进制 <em>逗号</em> 的事实)。</p></div><div class=paragraph><p>在我们的例子中，允许使用小数点/逗号会给人一种错误的精确度感觉: <code>50</code> 和 <code>51</code> 的焦点长度之间几乎没有明显的差别，所以允许用户输入像 <code>50.5</code> 这样的东西不是一个好主意。请注意，这是我的观点，但我是编写这个程序的人。当然，你也可以在你的电脑里做其他选择。</p></div></div><div class=sect3><h4 id=x86-pinhole-options>A.13.3.2. 提供选项<a class=anchor href=#x86-pinhole-options></a></h4><div class=paragraph><p>在制作针孔相机时，我们需要知道的最重要的事情是针孔的直径。由于我们想要拍摄清晰的图像，我们将使用上面的公式从焦距计算针孔直径。由于专家为 <code>PC</code> 常数提供了几种不同的值，我们需要做出选择。</p></div><div class=paragraph><p>传统的UNIX®编程有两种选择程序参数的主要方法，另外在用户不做选择时有一个默认值。</p></div><div class=paragraph><p>为什么有两种选择方式?</p></div><div class=paragraph><p>一种是允许一个(相对) <em>永久</em> 的选择，它在每次软件运行时自动应用，而不需要我们一遍又一遍地告诉它我们希望它做什么。</p></div><div class=paragraph><p>永久选项可以存储在配置文件中，通常可以在用户的主目录中找到。该文件通常与应用程序具有相同的名称，但以一个点开头。通常 <em>"rc"</em> 被添加到文件名中。我们的是 <span class=filename>~/.pinhole</span> 或 <span class=filename>~/.pinholerc</span>。 ( <span class=filename>~/</span> 表示当前用户的主目录。)</p></div><div class=paragraph><p>配置文件主要由具有许多可配置参数的程序使用。那些只有一个(或几个)参数的通常使用不同的方法:它们期望在 <em>环境变量</em> 中找到参数。在本例中，我们可能查看名为 <code>PINHOLE</code> 的环境变量。</p></div><div class=paragraph><p>通常，程序使用上述方法中的一种或另一种。否则，如果配置文件说明了一件事，而环境变量说明了另一件事，则程序可能会混淆(或太复杂)。</p></div><div class=paragraph><p>因为我们只需要选择 <em>一个</em> 这样的参数，所以我们将使用第二种方法并在环境中搜索名为 <code>PINHOLE</code> 的变量。</p></div><div class=paragraph><p>另一种方法允许我们做出 <em>特别的</em> 决定: <em>"虽然我通常希望您使用0.039，但这次我希望您使用0.03872。"</em>
+换句话说，它让我们可以 <em>忽略</em> 永久的选择。</p></div><div class=paragraph><p>这种类型的选择通常通过命令行参数来完成。</p></div><div class=paragraph><p>最后，程序 <em>总是</em> 需要一个 <em>默认值</em>。用户可能不做任何选择。也许他不知道该选什么。也许他只是“随便看看”。最好的情况是，默认值将是大多数用户无论如何都会选择的值。这样他们就不需要做选择了。或者，更确切地说，他们可以选择默认值，而不需要额外的努力。</p></div><div class=paragraph><p>给定这个系统，程序可能会找到冲突的选项，并以这样的方式处理它们:</p></div><div class="olist arabic procedure"><ol class=arabic><li><p>如果它发现一个 <em>特别的</em> 选择(例如，命令行参数)，它应该接受该选择。它必须忽略任何永久的选择和任何违约。</p></li><li><p><em>否则</em> ，如果它找到一个永久选项(例如，一个环境变量)，它应该接受它，并忽略默认选项。</p></li><li><p><em>否则</em> ，它应该使用默认值。</p></li></ol></div><div class=paragraph><p>我们还需要决定 <code>PC</code> 选择的 <em>格式</em> 。</p></div><div class=paragraph><p>在第一个站点上，对于环境变量使用 <code>PINHOLE=0.04</code> 格式，对于命令行使用 <code>-p0.04</code> 格式似乎很明显。</p></div><div class=paragraph><p>允许这样做实际上是一种安全风险。 <code>PC</code> 常数是一个非常小的数字。自然，我们会用 <code>PC</code> 的各种小值来测试我们的软件。但是，如果有人运行的程序选择了一个巨大的值，会发生什么呢?</p></div><div class=paragraph><p>它可能会使程序崩溃，因为我们没有设计它来处理巨大的数字。</p></div><div class=paragraph><p>或者，我们可以在程序上花更多的时间，这样它就可以处理大量的数据。如果我们为不懂计算机的用户编写商业软件，我们可能会这样做。</p></div><div class=paragraph><p>或者，我们可以说， <em>"强硬!用户应该更清楚。""</em></p></div><div class=paragraph><p>或者，我们可能只是让用户无法输入一个巨大的数字。这是我们将采用的方法:我们将使用 <em>隐含 0.</em> 前缀。</p></div><div class=paragraph><p>换句话说，如果用户想要 <code>0.04</code> ，我们期望他输入 <code>-p04</code> ，或者在他的环境中设置 <code>PINHOLE=04</code> 。因此，如果他说 <code>-p9999999</code> ，我们将把它解释为 <code>0.9999999</code>——仍然很荒谬，但至少更安全。</p></div><div class=paragraph><p>其次，许多用户只想使用Bender常数或Connors常数。为了方便他们，我们将 <code>-b</code> 解释为与 <code>-p04</code> 相同， <code>-c</code> 解释为与 <code>-p037</code> 相同。</p></div></div><div class=sect3><h4 id=x86-pinhole-output>A.13.3.3. 输出<a class=anchor href=#x86-pinhole-output></a></h4><div class=paragraph><p>我们需要决定我们希望我们的软件以什么格式发送到输出。</p></div><div class=paragraph><p>由于我们的输入允许不指定数量的焦距条目，因此可以使用传统的数据库样式输出，在单独的一行上显示每个焦距的计算结果，同时用 <code>tab</code> 将一行上的所有值分隔开。</p></div><div class=paragraph><p>还可以允许用户指定使用我们前面研究过的CSV格式。在本例中，我们将打印一行以逗号分隔的名称，描述每一行的每个字段，然后像以前一样显示结果，但在 <code>tab</code> 上用 <code>逗号</code> 代替。</p></div><div class=paragraph><p>我们需要CSV格式的命令行选项。我们不能用 <code>-c</code> 因为这已经意味着 <em>使用康纳斯常数</em> 。出于某种奇怪的原因，许多网站将CSV文件称为 <em>"Excel电子表格"</em> (尽管CSV格式先于Excel格式)。因此，我们将使用 <code>-e</code> 开关通知我们的软件，我们希望以CSV格式输出。</p></div><div class=paragraph><p>我们将以焦距开始输出的每一行。这一开始听起来可能是重复的，特别是在交互模式中:用户输入焦距，我们在重复它。</p></div><div class=paragraph><p>但是用户可以在一行上输入多个焦距。输入也可以来自文件或另一个程序的输出。在这种情况下，用户根本看不到输入。</p></div><div class=paragraph><p>出于同样的原因，输出可以进入我们稍后要检查的文件，也可以进入打印机，或者成为另一个程序的输入。</p></div><div class=paragraph><p>因此，以用户输入的焦距开始每一行是非常合理的。</p></div><div class=paragraph><p>不,等等!不是用户输入的。如果用户输入如下内容:</p></div><div class=listingblock><div class=content><pre class="rouge highlight"><code data-lang=shell> 00000000150</code></pre></div></div><div class=paragraph><p>显然，我们需要去掉前导的零。</p></div><div class=paragraph><p>因此，我们可以考虑按原样读取用户输入，在FPU内将其转换为二进制，并从那里打印出来。</p></div><div class=paragraph><p>但是…​</p></div><div class=paragraph><p>如果用户输入如下内容:</p></div><div class=listingblock><div class=content><pre class="rouge highlight"><code data-lang=shell> 17459765723452353453534535353530530534563507309676764423</code></pre></div></div><div class=paragraph><p>哈!封装的十进制FPU格式允许我们输入18位数字。但是用户输入的数字超过18位。我们该怎么处理呢?</p></div><div class=paragraph><p>好吧，我们 <em>可以</em> 修改我们的代码来读取前18位数字，将其输入到FPU，然后读取更多的数字，将我们已经在TOS上的数字乘以10的额外数字数，然后再 <code>add</code> 它。</p></div><div class=paragraph><p>是的，我们可以这么做。但在 <em>这个</em> 节目中，这将是荒谬的(在另一个节目中，这可能就是要做的事情):即使用毫米表示的地球周长也只需要11位数字。显然，我们无法制造出这么大的摄像机(至少现在还不行)。</p></div><div class=paragraph><p>因此，如果用户输入如此巨大的数字，他要么是感到无聊，要么是在测试我们，要么是试图闯入系统，要么是在玩游戏——除了设计针孔相机，他什么都做。</p></div><div class=paragraph><p>我们该怎么办?</p></div><div class=paragraph><p>我们会打他的脸，换句话说:</p></div><div class=listingblock><div class=content><pre class="rouge highlight"><code data-lang=shell>17459765723452353453534535353530530534563507309676764423	???	???	???	???	???</code></pre></div></div><div class=paragraph><p>为了实现这一点，我们只需忽略前导的零。一旦我们找到一个非零的数字，我们将初始化一个计数器为 <code>0</code> ，并开始采取三步:</p></div><div class="olist arabic procedure"><ol class=arabic><li><p>将数字发送到输出端。</p></li><li><p>将这个数字附加到一个缓冲区中，我们稍后将使用它来生成可以发送到FPU的打包小数。</p></li><li><p>增加计数器。</p></li></ol></div><div class=paragraph><p>现在，当我们采取这三步的时候，我们还需要注意以下两个条件之一:</p></div><div class=ulist><ul><li><p>如果计数器增长到18以上，则停止向缓冲区追加数据。我们继续读取数字并将它们发送到输出。</p></li><li><p>如果，或者更确切地说， <em>当</em> 下一个输入字符不是数字时，我们现在就完成了输入。</p><div class=paragraph><p>顺便说一句，我们可以简单地丢弃非数字，除非它是一个 <code>#</code> ，我们必须返回到输入流。它开始一个注释，所以我们必须在完成输出并开始寻找更多输入之后看到它。</p></div></li></ul></div><div class=paragraph><p>这仍然存在一种可能性:如果所有用户输入的都是一个零(或几个零)，我们将永远无法找到一个非零来显示。</p></div><div class=paragraph><p>只要计数器停留在 <code>0</code> ，我们就可以确定发生了这种情况。在这种情况下，我们需要向输出发送 <code>0</code> ，并执行另一个“耳光”:</p></div><div class=listingblock><div class=content><pre class="rouge highlight"><code data-lang=shell>0	???	???	???	???	???</code></pre></div></div><div class=paragraph><p>一旦我们显示了焦距并确定它是有效的(大于 <code>0</code> 但不超过18位)，我们就可以计算针孔直径。</p></div><div class=paragraph><p><em>pinhole</em> 包含 <em>pin</em> 这个词并不是巧合。事实上，许多针孔字面上就是一个 <em>针孔</em> ，一个用大头针尖精心打出来的孔。</p></div><div class=paragraph><p>这是因为一个典型的针孔非常小。我们的公式以毫米为单位。我们将它乘以 <code>1000</code> ，这样我们可以输出以 <em>microns</em> 为单位的结果。</p></div><div class=paragraph><p>在这一点上，我们还要面对另一个陷阱:过于精确。</em></p></div><div class=paragraph><p>是的，FPU是为高精度数学设计的。但我们讨论的不是高精度数学。我们正在处理物理(特别是光学)。</p></div><div class=paragraph><p>假设我们想把卡车变成针孔相机(我们不是第一个这么做的人!)假设它的盒子是 <code>12</code> 米长，所以焦距是 <code>12000</code> 。用本德常数，得到根号 <code>12000</code> 乘以 <code>0.04</code> ，也就是 <code>4.381780460</code> 毫米，或 <code>4381.780460</code> 微米。</p></div><div class=paragraph><p>不管怎样，结果都精确到荒谬的地步。我们的卡车还不 <em>精确</em> 到 <code>12000</code> 毫米长。我们没有如此精确地测量它的长度，所以说我们需要一个直径为 <code>4.381780460</code> 毫米的针孔，嗯，是骗人的。<code>4.4</code> 毫米就可以了。</p></div><div class="admonitionblock note"><table><tbody><tr><td class=icon><i class="fa icon-note" title=Note></i></td><td class=content><div class=paragraph><p>在上面的例子中，我“只”使用了10个数字。想象一下，18个都去是多么荒谬!</p></div></td></tr></tbody></table></div><div class=paragraph><p>我们需要限制结果的有效位数。一种方法是使用表示微米的整数。所以我们的卡车需要一个直径为 <code>4382</code> 微米的针孔。看看这个数字，我们仍然认为 <code>4400</code> 微米或 <code>4.4</code> 毫米已经足够接近了。</p></div><div class=paragraph><p>此外，我们可以决定，无论我们得到的结果有多大，我们都只想显示四个有效数字(当然，也可以是其中的任何其他数字)。可惜的是，FPU不提供对特定数字的四舍五入(毕竟，它不将数字视为十进制，而是二进制)。</p></div><div class=paragraph><p>因此，我们必须设计一种算法来减少有效数字的数量。</p></div><div class=paragraph><p>这是我的(我觉得有点尴尬，如果你知道更好的， <em>请</em> 告诉我):</p></div><div class="olist arabic procedure"><ol class=arabic><li><p>将计数器初始化为 <code>0</code>。</p></li><li><p>当数字大于或等于 <code>10000</code> 时，将其除以 <code>10</code> 并增加计数器。</p></li><li><p>输出结果。</p></li><li><p>当计数器大于 <code>0</code> 时，输出 <code>0</code> 并减少计数器。</p></li></ol></div><div class="admonitionblock note"><table><tbody><tr><td class=icon><i class="fa icon-note" title=Note></i></td><td class=content><div class=paragraph><p>只有在需要<em>四</em> 个有效数字时， <code>10000</code> 才合适。对于任何其他有效位数，将 <code>10000</code> 替换为提升到有效位数的 <code>10</code> 。</p></div></td></tr></tbody></table></div><div class=paragraph><p>然后，我们将输出针孔直径以微米为单位，四舍五入到四位有效数字。</p></div><div class=paragraph><p>在这一点上，我们知道 <em>焦距</em> 和 <em>针孔直径</em> 。这意味着我们有足够的信息来计算 <em>f</em> 值。</p></div><div class=paragraph><p>我们将显示f数，四舍五入为四个有效数字。f值很可能告诉我们的很少。为了使它更有意义，我们可以找到最近的 <em>归一化 f-number</em> ，即√2的最近次幂。</p></div><div class=paragraph><p>我们用实际的f乘以它自己，当然，会得到它的 <code>square</code>。然后我们将计算它以2为底的对数，这比计算以2为底的平方根的对数要容易得多!我们将把结果四舍五入到最接近的整数。接下来，我们将取2的结果次方。实际上，FPU为我们提供了一个很好的捷径:我们可以使用 <code>fscale</code> 操作代码来“缩放”1，这类似于将一个整数向左 <code>shift</code> 。最后，我们计算它的平方根，就得到了最接近的归一化f数。</p></div><div class=paragraph><p>如果所有这些听起来让人不知所措(或者工作量太大)，那么当您看到代码时就会清楚得多。总共需要9个操作代码:</p></div><div class="literalblock programlisting"><div class=content><pre>fmul	st0, st0
+	fld1
+	fld	st1
+	fyl2x
+	frndint
+	fld1
+	fscale
+	fsqrt
+	fstp	st1</pre></div></div><div class=paragraph><p>第一行 <code>fmul st0, st0</code> 对TOS(堆栈顶部，与 <code>st</code> 相同，被nasm称为 <code>st0</code> )的内容进行平方处理。 <code>fld1</code> 在TOS上推 <code>1</code> 。</p></div><div class=paragraph><p>下一行， <code>fld st1</code>，将正方形推回TOS。此时，这个正方形既在 <code>st</code> 中，也在 <code>st(2)</code> 中(稍后我们就会清楚为什么要在堆栈上留下第二个副本)。
+<code>st(1)</code> 包含 <code>1</code>。</p></div><div class=paragraph><p>接下来， <code>fyl2x</code> 计算以2为底的对数 <code>st</code> 乘以 <code>st(1)</code> 。这就是为什么我们之前把 <code>1</code> 放在 <code>st(1)</code> 上。</p></div><div class=paragraph><p>此时， <code>st</code> 包含我们刚刚计算的对数， <code>st(1)</code> 包含我们稍后保存的实际f-number的平方。
+</p></div><div class=paragraph><p><code>frndint</code> 将TOS舍入到最接近的整数。
+<code>fld1</code> 推 <code>1</code>。
+<code>fscale</code> 将TOS上的 <code>1</code> 按 <code>st(1)</code> 中的值移动，有效地将2提升到 <code>st(1)</code>。</p></div><div class=paragraph><p>最后， <code>fsqrt</code> 计算结果的平方根，即最接近的归一化f数。</p></div><div class=paragraph><p>现在我们有了TOS上最接近的归一化f数，以2为底的对数四舍五入到 <code>st(1)</code> 中最接近的整数，以及 <code>st(2)</code> 中实际f数的平方。我们将保存 <code>st(2)</code> 中的值以备以后使用。</p></div><div class=paragraph><p>但是我们不再需要 <code>st(1)</code> 的内容了。最后一行 <code>fstp st1</code> 将 <code>st</code> 的内容放到 <code>st(1)</code> 中，然后弹出。因此， <code>st(1)</code> 现在是 <code>st</code>,  <code>st(2)</code> 现在是 <code>st(1)</code> ，以此类推。新的 <code>st</code> 包含归一化的f数。新的 <code>st(1)</code> 包含我们为后代存储的实际f-number的平方。</p></div><div class=paragraph><p>此时，我们就可以输出归一化的f数了。因为它是标准化的，所以我们不会四舍五入到四位有效数字，而是以其完整的精度发送出去。</p></div><div class=paragraph><p>归一化f数是有用的，只要它相当小，并且可以在我们的测光表上找到它。否则我们需要一种不同的方法来确定适当的曝光量。</p></div><div class=paragraph><p>前面我们已经算出了从在不同f值下测量的适当曝光量计算任意f值下适当曝光量的公式。</p></div><div class=paragraph><p>我见过的每一个测光表都能确定适当的曝光在5.6 f6。因此，我们将计算 <em>"f5.6 倍增器,"</em> ，即我们需要乘以f5.6的曝光量，以确定针孔相机的适当曝光。</p></div><div class=paragraph><p>从上面的公式我们知道这个因子可以用f数(实际的f数，不是归一化的f数)除以 <code>5.6</code> ，然后对结果平方来计算。</p></div><div class=paragraph><p>从数学上讲，用f的平方除以 <code>5.6</code> 的平方会得到同样的结果。</p></div><div class=paragraph><p>在计算上，当我们只能求一个数的平方时，我们不想求两个数的平方。第一个解看起来更好。</p></div><div class=paragraph><p>但是…​</p></div><div class=paragraph><p><code>5.6</code> 是一个 <em>常数</em>。我们不必让我们的FPU浪费宝贵的周期。我们可以让它除以f的平方除以 <code>5.6²</code> 等于什么。或者我们可以用f数除以 <code>5.6</code> ，然后把结果平方。这两种方式现在看来是平等的。</p></div><div class=paragraph><p>但是，他们不是!</p></div><div class=paragraph><p>在学习了上面的摄影原理之后，我们记得 <code>5.6</code> 实际上是根号2的五次方。一个 <em>无理</em> 数。这个数的平方 <em>正好是</em> <code>32</code>。</p></div><div class=paragraph><p><code>32</code> 不仅是一个整数，它还是2的幂。我们不需要用f的平方除以 <code>32</code> 。我们只需要使用 <code>fscale</code> 将它右移5位。在FPU术语中，这意味着我们将用<code>st(1)</code> 等于 <code>-5</code> <code>fscale</code> 它。这比除法 <em>快得多</em> 。</p></div><div class=paragraph><p>所以，现在就很清楚为什么我们要在FPU堆栈的顶部保存f数的平方了。f5.6倍增器的计算是整个程序中最简单的计算!我们将输出它四舍五入到四位有效数字。</p></div><div class=paragraph><p>我们还可以计算一个更有用的数字:f-number从f5.6开始停止的次数。如果我们的f值刚好在测光表的范围之外，这可能会对我们有帮助，但是我们有一个快门，它可以让我们设置不同的速度，这个快门有止点。</p></div><div class=paragraph><p>假设我们的f值是f5.6的5位，而测光表显示我们应该使用1/1000秒。然后我们可以先将快门速度设置为1/1000，然后将表盘移动5位。</p></div><div class=paragraph><p>这个计算也很简单。我们所要做的就是计算我们刚刚计算的f5.6乘数的以2为底的对数(尽管我们需要在取四舍五入之前得到它的值)。然后将结果四舍五入到最接近的整数。我们不需要担心在这个例子中是否有超过四个有效数字:结果很可能只有一个或两个数字。</p></div></div></div><div class=sect2><h3 id=x86-fpu-optimizations>A.13.4. FPU 优化<a class=anchor href=#x86-fpu-optimizations></a></h3><div class=paragraph><p>在汇编语言中，我们可以以高级语言(包括C语言)无法实现的方式优化FPU代码。</p></div><div class=paragraph><p>每当C函数需要计算浮点值时，它会将所有必要的变量和常量加载到FPU寄存器中。然后它进行所需的任何计算以得到正确的结果。好的C编译器可以很好地优化这部分代码。</p></div><div class=paragraph><p>它通过将结果保留在TOS上来“返回”值。然而，在它返回之前，它会进行清理。它在计算中使用的所有变量和常量现在都从FPU中消失了。</p></div><div class=paragraph><p>它不能做我们上面所做的:我们计算f-number的平方，并将它保存在堆栈上，以便稍后由另一个函数使用。</p></div><div class=paragraph><p>我们 <em>知道</em> 以后会需要这个值。我们还知道堆栈上有足够的空间(只能容纳8个数字)来存储它。</p></div><div class=paragraph><p>C编译器无法知道它在堆栈上的某个值在不久的将来会再次被需要。
+
+</p></div><div class=paragraph><p>当然，C程序员可能知道这一点。但是他唯一的方法是将值存储在一个内存变量中。</p></div><div class=paragraph><p>这意味着，首先，该值将从FPU内部使用的80位精度更改为 C <em>双精度</em> (64位)或甚至 <em>单精度</em> (32位)。</p></div><div class=paragraph><p>这也意味着必须将值从TOS移到内存中，然后再移回来。唉，在所有的FPU操作中，访问计算机内存的操作是最慢的。</p></div><div class=paragraph><p>因此，无论何时用汇编语言对FPU进行编程，都要寻找将中间结果保留在FPU堆栈上的方法。</p></div><div class=paragraph><p>我们可以把这个想法更进一步!在我们的程序中，我们使用了一个 <em>常量</em> (我们命名为 <code>PC</code> 的那个)。</p></div><div class=paragraph><p>不管我们计算了多少小孔直径:1、10、20、1000，我们总是使用相同的常数。因此，我们可以通过始终保持堆栈上的常量来优化我们的程序。</p></div><div class=paragraph><p>在程序的早期，我们正在计算上述常数的值。我们需要对常数的每一位除以 <code>10</code> 。</p></div><div class=paragraph><p>乘法比除法快得多。所以，在程序开始的时候，我们用 <code>10</code> 除以 <code>1</code> 得到 <code>0.1</code> ，然后我们把它保存在堆栈上:不是每一位输入都除以 <code>10</code> ，而是乘以 <code>0.1</code> 。</p></div><div class=paragraph><p>顺便说一下，我们没有直接输入 <code>0.1</code> ，尽管我们可以这样做。我们这样做是有原因的:虽然 <code>0.1</code> 可以用一个小数点位表示，但我们不知道它需要多少位 <em>binary</em> 。因此，我们让FPU以它自己的高精度计算它的二进制值。</p></div><div class=paragraph><p>我们使用其他常数:我们将针孔直径乘以 <code>1000</code> ，将其从毫米转换为微米。当我们将数字四舍五入到四个有效数字时，我们将数字与 <code>10000</code> 进行比较。因此，我们将 <code>1000</code> 和 <code>10000</code> 都保留在堆栈上。当然，当四舍五入到四位数时，我们会重复使用 <code>0.1</code> 。</p></div><div class=paragraph><p>最后但同样重要的是，我们在堆栈上保留 <code>-5</code> 。我们需要它乘以f的平方，而不是除以 <code>32</code> 。我们最后加载这个常数并非偶然。这使它成为堆栈的顶部，当只有常量在上面时。因此，当f数的平方被缩放时， <code>-5</code> 在 <code>st(1)</code> 处，正是 <code>fscale</code> 所期望的位置。</p></div><div class=paragraph><p>通常从头创建某些常量，而不是从内存中加载它们。这就是我们对 <code>-5</code> 的处理:</p></div><div class="literalblock programlisting"><div class=content><pre>	fld1			; TOS =  1
+	fadd	st0, st0	; TOS =  2
+	fadd	st0, st0	; TOS =  4
+	fld1			; TOS =  1
+	faddp	st1, st0	; TOS =  5
+	fchs			; TOS = -5</pre></div></div><div class=paragraph><p>我们可以将所有这些优化归纳为一条规则: <em>在堆栈上保持重复值!</em></p></div><div class="admonitionblock tip"><table><tbody><tr><td class=icon><i class="fa icon-tip" title=Tip></i></td><td class=content><div class=paragraph><p><em>PostScript®</em> 是一种面向堆栈的编程语言。关于PostScript®的书比关于FPU汇编语言的书更多:掌握PostScript®将帮助您掌握FPU。</p></div></td></tr></tbody></table></div></div><div class=sect2><h3 id=x86-pinhole-the-code>A.13.5. pinhole 代码<a class=anchor href=#x86-pinhole-the-code></a></h3><div class="literalblock programlisting"><div class=content><pre>;;;;;;; pinhole.asm ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;
+; Find various parameters of a pinhole camera construction and use
+;
+; Started:	 9-Jun-2001
+; Updated:	10-Jun-2001
+;
+; Copyright (c) 2001 G. Adam Stanislav
+; All rights reserved.
+;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+%include	&#39;system.inc&#39;
+
+%define	BUFSIZE	2048
+
+section	.data
+align 4
+ten	dd	10
+thousand	dd	1000
+tthou	dd	10000
+fd.in	dd	stdin
+fd.out	dd	stdout
+envar	db	&#39;PINHOLE=&#39;	; Exactly 8 bytes, or 2 dwords long
+pinhole	db	&#39;04,&#39;, 		; Bender&#39;s constant (0.04)
+connors	db	&#39;037&#39;, 0Ah	; Connors&#39; constant
+usg	db	&#39;Usage: pinhole [-b] [-c] [-e] [-p &lt;value&gt;] [-o &lt;outfile&gt;] [-i &lt;infile&gt;]&#39;, 0Ah
+usglen	equ	$-usg
+iemsg	db	&#34;pinhole: Can&#39;t open input file&#34;, 0Ah
+iemlen	equ	$-iemsg
+oemsg	db	&#34;pinhole: Can&#39;t create output file&#34;, 0Ah
+oemlen	equ	$-oemsg
+pinmsg	db	&#34;pinhole: The PINHOLE constant must not be 0&#34;, 0Ah
+pinlen	equ	$-pinmsg
+toobig	db	&#34;pinhole: The PINHOLE constant may not exceed 18 decimal places&#34;, 0Ah
+biglen	equ	$-toobig
+huhmsg	db	9, &#39;???&#39;
+separ	db	9, &#39;???&#39;
+sep2	db	9, &#39;???&#39;
+sep3	db	9, &#39;???&#39;
+sep4	db	9, &#39;???&#39;, 0Ah
+huhlen	equ	$-huhmsg
+header	db	&#39;focal length in millimeters,pinhole diameter in microns,&#39;
+	db	&#39;F-number,normalized F-number,F-5.6 multiplier,stops &#39;
+	db	&#39;from F-5.6&#39;, 0Ah
+headlen	equ	$-header
+
+section .bss
+ibuffer	resb	BUFSIZE
+obuffer	resb	BUFSIZE
+dbuffer	resb	20		; decimal input buffer
+bbuffer	resb	10		; BCD buffer
+
+section	.text
+align 4
+huh:
+	call	write
+	push	dword huhlen
+	push	dword huhmsg
+	push	dword [fd.out]
+	sys.write
+	add	esp, byte 12
+	ret
+
+align 4
+perr:
+	push	dword pinlen
+	push	dword pinmsg
+	push	dword stderr
+	sys.write
+	push	dword 4		; return failure
+	sys.exit
+
+align 4
+consttoobig:
+	push	dword biglen
+	push	dword toobig
+	push	dword stderr
+	sys.write
+	push	dword 5		; return failure
+	sys.exit
+
+align 4
+ierr:
+	push	dword iemlen
+	push	dword iemsg
+	push	dword stderr
+	sys.write
+	push	dword 1		; return failure
+	sys.exit
+
+align 4
+oerr:
+	push	dword oemlen
+	push	dword oemsg
+	push	dword stderr
+	sys.write
+	push	dword 2
+	sys.exit
+
+align 4
+usage:
+	push	dword usglen
+	push	dword usg
+	push	dword stderr
+	sys.write
+	push	dword 3
+	sys.exit
+
+align 4
+global	_start
+_start:
+	add	esp, byte 8	; discard argc and argv[0]
+	sub	esi, esi
+
+.arg:
+	pop	ecx
+	or	ecx, ecx
+	je	near .getenv		; no more arguments
+
+	; ECX contains the pointer to an argument
+	cmp	byte [ecx], &#39;-&#39;
+	jne	usage
+
+	inc	ecx
+	mov	ax, [ecx]
+	inc	ecx
+
+.o:
+	cmp	al, &#39;o&#39;
+	jne	.i
+
+	; Make sure we are not asked for the output file twice
+	cmp	dword [fd.out], stdout
+	jne	usage
+
+	; Find the path to output file - it is either at [ECX+1],
+	; i.e., -ofile --
+	; or in the next argument,
+	; i.e., -o file
+
+	or	ah, ah
+	jne	.openoutput
+	pop	ecx
+	jecxz	usage
+
+.openoutput:
+	push	dword 420	; file mode (644 octal)
+	push	dword 0200h | 0400h | 01h
+	; O_CREAT | O_TRUNC | O_WRONLY
+	push	ecx
+	sys.open
+	jc	near oerr
+
+	add	esp, byte 12
+	mov	[fd.out], eax
+	jmp	short .arg
+
+.i:
+	cmp	al, &#39;i&#39;
+	jne	.p
+
+	; Make sure we are not asked twice
+	cmp	dword [fd.in], stdin
+	jne	near usage
+
+	; Find the path to the input file
+	or	ah, ah
+	jne	.openinput
+	pop	ecx
+	or	ecx, ecx
+	je near usage
+
+.openinput:
+	push	dword 0		; O_RDONLY
+	push	ecx
+	sys.open
+	jc	near ierr		; open failed
+
+	add	esp, byte 8
+	mov	[fd.in], eax
+	jmp	.arg
+
+.p:
+	cmp	al, &#39;p&#39;
+	jne	.c
+	or	ah, ah
+	jne	.pcheck
+
+	pop	ecx
+	or	ecx, ecx
+	je	near usage
+
+	mov	ah, [ecx]
+
+.pcheck:
+	cmp	ah, &#39;0&#39;
+	jl	near usage
+	cmp	ah, &#39;9&#39;
+	ja	near usage
+	mov	esi, ecx
+	jmp	.arg
+
+.c:
+	cmp	al, &#39;c&#39;
+	jne	.b
+	or	ah, ah
+	jne	near usage
+	mov	esi, connors
+	jmp	.arg
+
+.b:
+	cmp	al, &#39;b&#39;
+	jne	.e
+	or	ah, ah
+	jne	near usage
+	mov	esi, pinhole
+	jmp	.arg
+
+.e:
+	cmp	al, &#39;e&#39;
+	jne	near usage
+	or	ah, ah
+	jne	near usage
+	mov	al, &#39;,&#39;
+	mov	[huhmsg], al
+	mov	[separ], al
+	mov	[sep2], al
+	mov	[sep3], al
+	mov	[sep4], al
+	jmp	.arg
+
+align 4
+.getenv:
+	; If ESI = 0, we did not have a -p argument,
+	; and need to check the environment for &#34;PINHOLE=&#34;
+	or	esi, esi
+	jne	.init
+
+	sub	ecx, ecx
+
+.nextenv:
+	pop	esi
+	or	esi, esi
+	je	.default	; no PINHOLE envar found
+
+	; check if this envar starts with &#39;PINHOLE=&#39;
+	mov	edi, envar
+	mov	cl, 2		; &#39;PINHOLE=&#39; is 2 dwords long
+rep	cmpsd
+	jne	.nextenv
+
+	; Check if it is followed by a digit
+	mov	al, [esi]
+	cmp	al, &#39;0&#39;
+	jl	.default
+	cmp	al, &#39;9&#39;
+	jbe	.init
+	; fall through
+
+align 4
+.default:
+	; We got here because we had no -p argument,
+	; and did not find the PINHOLE envar.
+	mov	esi, pinhole
+	; fall through
+
+align 4
+.init:
+	sub	eax, eax
+	sub	ebx, ebx
+	sub	ecx, ecx
+	sub	edx, edx
+	mov	edi, dbuffer+1
+	mov	byte [dbuffer], &#39;0&#39;
+
+	; Convert the pinhole constant to real
+.constloop:
+	lodsb
+	cmp	al, &#39;9&#39;
+	ja	.setconst
+	cmp	al, &#39;0&#39;
+	je	.processconst
+	jb	.setconst
+
+	inc	dl
+
+.processconst:
+	inc	cl
+	cmp	cl, 18
+	ja	near consttoobig
+	stosb
+	jmp	short .constloop
+
+align 4
+.setconst:
+	or	dl, dl
+	je	near perr
+
+	finit
+	fild	dword [tthou]
+
+	fld1
+	fild	dword [ten]
+	fdivp	st1, st0
+
+	fild	dword [thousand]
+	mov	edi, obuffer
+
+	mov	ebp, ecx
+	call	bcdload
+
+.constdiv:
+	fmul	st0, st2
+	loop	.constdiv
+
+	fld1
+	fadd	st0, st0
+	fadd	st0, st0
+	fld1
+	faddp	st1, st0
+	fchs
+
+	; If we are creating a CSV file,
+	; print header
+	cmp	byte [separ], &#39;,&#39;
+	jne	.bigloop
+
+	push	dword headlen
+	push	dword header
+	push	dword [fd.out]
+	sys.write
+
+.bigloop:
+	call	getchar
+	jc	near done
+
+	; Skip to the end of the line if you got &#39;#&#39;
+	cmp	al, &#39;#&#39;
+	jne	.num
+	call	skiptoeol
+	jmp	short .bigloop
+
+.num:
+	; See if you got a number
+	cmp	al, &#39;0&#39;
+	jl	.bigloop
+	cmp	al, &#39;9&#39;
+	ja	.bigloop
+
+	; Yes, we have a number
+	sub	ebp, ebp
+	sub	edx, edx
+
+.number:
+	cmp	al, &#39;0&#39;
+	je	.number0
+	mov	dl, 1
+
+.number0:
+	or	dl, dl		; Skip leading 0&#39;s
+	je	.nextnumber
+	push	eax
+	call	putchar
+	pop	eax
+	inc	ebp
+	cmp	ebp, 19
+	jae	.nextnumber
+	mov	[dbuffer+ebp], al
+
+.nextnumber:
+	call	getchar
+	jc	.work
+	cmp	al, &#39;#&#39;
+	je	.ungetc
+	cmp	al, &#39;0&#39;
+	jl	.work
+	cmp	al, &#39;9&#39;
+	ja	.work
+	jmp	short .number
+
+.ungetc:
+	dec	esi
+	inc	ebx
+
+.work:
+	; Now, do all the work
+	or	dl, dl
+	je	near .work0
+
+	cmp	ebp, 19
+	jae	near .toobig
+
+	call	bcdload
+
+	; Calculate pinhole diameter
+
+	fld	st0	; save it
+	fsqrt
+	fmul	st0, st3
+	fld	st0
+	fmul	st5
+	sub	ebp, ebp
+
+	; Round off to 4 significant digits
+.diameter:
+	fcom	st0, st7
+	fstsw	ax
+	sahf
+	jb	.printdiameter
+	fmul	st0, st6
+	inc	ebp
+	jmp	short .diameter
+
+.printdiameter:
+	call	printnumber	; pinhole diameter
+
+	; Calculate F-number
+
+	fdivp	st1, st0
+	fld	st0
+
+	sub	ebp, ebp
+
+.fnumber:
+	fcom	st0, st6
+	fstsw	ax
+	sahf
+	jb	.printfnumber
+	fmul	st0, st5
+	inc	ebp
+	jmp	short .fnumber
+
+.printfnumber:
+	call	printnumber	; F number
+
+	; Calculate normalized F-number
+	fmul	st0, st0
+	fld1
+	fld	st1
+	fyl2x
+	frndint
+	fld1
+	fscale
+	fsqrt
+	fstp	st1
+
+	sub	ebp, ebp
+	call	printnumber
+
+	; Calculate time multiplier from F-5.6
+
+	fscale
+	fld	st0
+
+	; Round off to 4 significant digits
+.fmul:
+	fcom	st0, st6
+	fstsw	ax
+	sahf
+
+	jb	.printfmul
+	inc	ebp
+	fmul	st0, st5
+	jmp	short .fmul
+
+.printfmul:
+	call	printnumber	; F multiplier
+
+	; Calculate F-stops from 5.6
+
+	fld1
+	fxch	st1
+	fyl2x
+
+	sub	ebp, ebp
+	call	printnumber
+
+	mov	al, 0Ah
+	call	putchar
+	jmp	.bigloop
+
+.work0:
+	mov	al, &#39;0&#39;
+	call	putchar
+
+align 4
+.toobig:
+	call	huh
+	jmp	.bigloop
+
+align 4
+done:
+	call	write		; flush output buffer
+
+	; close files
+	push	dword [fd.in]
+	sys.close
+
+	push	dword [fd.out]
+	sys.close
+
+	finit
+
+	; return success
+	push	dword 0
+	sys.exit
+
+align 4
+skiptoeol:
+	; Keep reading until you come to cr, lf, or eof
+	call	getchar
+	jc	done
+	cmp	al, 0Ah
+	jne	.cr
+	ret
+
+.cr:
+	cmp	al, 0Dh
+	jne	skiptoeol
+	ret
+
+align 4
+getchar:
+	or	ebx, ebx
+	jne	.fetch
+
+	call	read
+
+.fetch:
+	lodsb
+	dec	ebx
+	clc
+	ret
+
+read:
+	jecxz	.read
+	call	write
+
+.read:
+	push	dword BUFSIZE
+	mov	esi, ibuffer
+	push	esi
+	push	dword [fd.in]
+	sys.read
+	add	esp, byte 12
+	mov	ebx, eax
+	or	eax, eax
+	je	.empty
+	sub	eax, eax
+	ret
+
+align 4
+.empty:
+	add	esp, byte 4
+	stc
+	ret
+
+align 4
+putchar:
+	stosb
+	inc	ecx
+	cmp	ecx, BUFSIZE
+	je	write
+	ret
+
+align 4
+write:
+	jecxz	.ret	; nothing to write
+	sub	edi, ecx	; start of buffer
+	push	ecx
+	push	edi
+	push	dword [fd.out]
+	sys.write
+	add	esp, byte 12
+	sub	eax, eax
+	sub	ecx, ecx	; buffer is empty now
+.ret:
+	ret
+
+align 4
+bcdload:
+	; EBP contains the number of chars in dbuffer
+	push	ecx
+	push	esi
+	push	edi
+
+	lea	ecx, [ebp+1]
+	lea	esi, [dbuffer+ebp-1]
+	shr	ecx, 1
+
+	std
+
+	mov	edi, bbuffer
+	sub	eax, eax
+	mov	[edi], eax
+	mov	[edi+4], eax
+	mov	[edi+2], ax
+
+.loop:
+	lodsw
+	sub	ax, 3030h
+	shl	al, 4
+	or	al, ah
+	mov	[edi], al
+	inc	edi
+	loop	.loop
+
+	fbld	[bbuffer]
+
+	cld
+	pop	edi
+	pop	esi
+	pop	ecx
+	sub	eax, eax
+	ret
+
+align 4
+printnumber:
+	push	ebp
+	mov	al, [separ]
+	call	putchar
+
+	; Print the integer at the TOS
+	mov	ebp, bbuffer+9
+	fbstp	[bbuffer]
+
+	; Check the sign
+	mov	al, [ebp]
+	dec	ebp
+	or	al, al
+	jns	.leading
+
+	; We got a negative number (should never happen)
+	mov	al, &#39;-&#39;
+	call	putchar
+
+.leading:
+	; Skip leading zeros
+	mov	al, [ebp]
+	dec	ebp
+	or	al, al
+	jne	.first
+	cmp	ebp, bbuffer
+	jae	.leading
+
+	; We are here because the result was 0.
+	; Print &#39;0&#39; and return
+	mov	al, &#39;0&#39;
+	jmp	putchar
+
+.first:
+	; We have found the first non-zero.
+	; But it is still packed
+	test	al, 0F0h
+	jz	.second
+	push	eax
+	shr	al, 4
+	add	al, &#39;0&#39;
+	call	putchar
+	pop	eax
+	and	al, 0Fh
+
+.second:
+	add	al, &#39;0&#39;
+	call	putchar
+
+.next:
+	cmp	ebp, bbuffer
+	jb	.done
+
+	mov	al, [ebp]
+	push	eax
+	shr	al, 4
+	add	al, &#39;0&#39;
+	call	putchar
+	pop	eax
+	and	al, 0Fh
+	add	al, &#39;0&#39;
+	call	putchar
+
+	dec	ebp
+	jmp	short .next
+
+.done:
+	pop	ebp
+	or	ebp, ebp
+	je	.ret
+
+.zeros:
+	mov	al, &#39;0&#39;
+	call	putchar
+	dec	ebp
+	jne	.zeros
+
+.ret:
+	ret</pre></div></div><div class=paragraph><p>代码遵循与我们之前看到的所有其他过滤器相同的格式，只有一个细微的例外:</p></div><div class=quoteblock><blockquote><div class=paragraph><p>我们不再假设输入的结束意味着要做的事情的结束，这在 <em>面向字符</em> 的过滤器中是理所当然的。</p></div><div class=paragraph><p>此过滤器不处理字符。它处理一种 <em>语言</em> (尽管是一种非常简单的语言，只由数字组成)。</p></div><div class=paragraph><p>当我们没有更多的输入时，它可能意味着以下两种情况之一:</p></div><div class=ulist><ul><li><p>我们结束了，可以退出了。这和以前一样。</p></li><li><p>我们读到的最后一个字符是一个数字。我们将它存储在ascii到浮点数转换缓冲区的末尾。现在，我们需要将该缓冲区的内容转换为一个数字，并写入输出的最后一行。</p></li></ul></div><div class=paragraph><p>因此，我们修改了 <code>getchar</code> 和 <code>read</code> 例程，以便在从输入中获取另一个字符时返回 <em>清除的</em> <code>carry flag</code>，或者<em>在</em> 没有更多输入时返回的 <code>carry flag</code> 。</p></div><div class=paragraph><p>当然，我们仍然在使用汇编语言来实现这一点!好好看看 <code>getchar</code> 。它 <em>总是</em> 返回 <em>清除的</em> <code>carry flag</code> 。</p></div><div class=paragraph><p>然而，我们的主代码依赖于 <code>carry flag</code> 来告诉它何时退出——并且它可以工作。
+</p></div><div class=paragraph><p>魔法在 <code>read</code> 中。每当它从系统接收到更多输入时，它只返回 <code>getchar</code>，后者从输入缓冲区获取一个字符， <em>清除</em> <code>carry flag</code> 并返回。</p></div><div class=paragraph><p>但是当 <code>read</code> 没有从系统接收到更多的输入时，它根本 <em>不</em> 返回 <code>getchar</code> 。相反， <code>add esp, byte 4</code> 操作码向 <code>ESP</code> 加 <code>4</code> , <em>设置</em> <code>carry flag</code> ，然后返回。</p></div><div class=paragraph><p>那么，它会回到哪里?当程序使用 <code>call</code> 操作码时，微处理器将返回地址 <code>push</code> ，也就是说，它将它存储在堆栈的顶部(而不是FPU堆栈，系统堆栈，它在内存中)。当程序使用 <code>ret</code> 代码时，微处理器从堆栈中 <code>pop</code> 返回值，并跳转到存储在那里的地址。</p></div><div class=paragraph><p>但是自从我们给 <code>ESP</code> (栈指针寄存器)加了 <code>4</code> 之后，我们有效地给了微处理器一个小的 <em>amnesia</em> 案例:它不再记得是 <code>getchar</code> <code>call</code> 了 <code>read</code> 。</p></div><div class=paragraph><p>由于 <code>getchar</code> 在 <code>call</code> <code>read</code> 之前从不 <code>push</code> 任何东西，堆栈的顶部现在包含了 <code>call</code> <code>getchar</code> 的对象的返回地址。就调用者而言，他 <code>call</code> <code>getchar</code>, getchar <code>ret</code> <code>carry flag</code> 集!</p></div></blockquote></div><div class=paragraph><p>除此之外， <code>bcdload</code> 例程陷入了大端端和小端端之间的利力浦特式冲突之中。</p></div><div class=paragraph><p>它将数字的文本表示形式转换为该数字:文本按大端顺序存储，但 <em>packed decimal</em> 按小端顺序存储。</p></div><div class=paragraph><p>为了解决冲突，我们在早期使用 <code>std</code> op 代码。稍后我们用 <code>cld</code> 取消它:当 <code>std</code>  <code>call</code> 激活时，我们不调用任何可能依赖于 <em>方向标志</em> 默认设置的东西，这是非常重要的。</p></div><div class=paragraph><p>如果您已经阅读了前面的整章，那么这段代码中的其他所有内容都应该是清晰的。</p></div><div class=paragraph><p>这是编程需要大量思考和只需少量编码这一格言的一个经典例子。一旦我们仔细考虑了每一个微小的细节，代码就几乎是自己写出来的。</p></div></div><div class=sect2><h3 id=x86-pinhole-using>A.13.6. 使用针孔<a class=anchor href=#x86-pinhole-using></a></h3><div class=paragraph><p>因为我们决定让程序 <em>忽略</em> 除数字以外的任何输入(甚至包括注释中的数字)，所以实际上可以执行 <em>文本查询</em> 。我们不必 <em>这么做</em> 这么做 <em>可以</em>。</p></div><div class=paragraph><p>在我看来，形成一个文本查询，而不是必须遵循非常严格的语法，使软件更加用户友好。</p></div><div class=paragraph><p>假设我们想要建立一个针孔相机使用4x5英寸胶卷。那部电影的标准焦距约为150毫米。我们想 <em>微调</em> 我们的焦距，使针孔直径尽可能的圆。让我们再假设一下，我们对相机很满意，但对电脑有点害怕。比起输入一堆数字，我们想要 <em>问</em> 几个问题。</p></div><div class=paragraph><p>我们的会话可能像这样:</p></div><div class=listingblock><div class=content><pre class="rouge highlight"><code data-lang=shell>% pinhole
+
+Computer,
+
+What size pinhole <span class=k>do </span>I need <span class=k>for </span>the focal length of 150?
+150	490	306	362	2930	12
+Hmmm... How about 160?
+160	506	316	362	3125	12
+Let<span class=s1>&#39;s make it 155, please.
+155	498	311	362	3027	12
+Ah, let&#39;</span>s try 157...
+157	501	313	362	3066	12
+156?
+156	500	312	362	3047	12
+That<span class=s1>&#39;s it! Perfect! Thank you very much!
+^D</span></code></pre></div></div><div class=paragraph><p>我们发现，当焦距为150时，我们的针孔直径应该是490微米，或0.49毫米，如果我们使用几乎相同的焦距156毫米，我们可以得到刚好是0.5毫米的针孔直径。</p></div></div><div class=sect2><h3 id=x86-pinhole-scripting>A.13.7. 脚本<a class=anchor href=#x86-pinhole-scripting></a></h3><div class=paragraph><p>因为我们选择了 <code>#</code> 字符来表示注释的开始，所以我们可以将针孔软件视为 <em>脚本语言</em>。</p></div><div class=paragraph><p>你可能见过这样的 shell <em>scripts</em> 脚本:</p></div><div class="literalblock programlisting"><div class=content><pre>#! /bin/sh</pre></div></div><div class=paragraph><p>…或…​</p></div><div class="literalblock programlisting"><div class=content><pre>#!/bin/sh</pre></div></div><div class=paragraph><p>…因为 <code>#!</code> 是可选的。</p></div><div class=paragraph><p>每当UNIX®被要求运行以 <code>#!</code> ，它假定该文件是一个脚本。它将命令添加到脚本第一行的其余部分，并尝试执行该命令。</p></div><div class=paragraph><p>假设现在我们已经在/usr/local/bin/中安装了针孔，现在我们可以编写一个脚本来计算适用于120胶卷常用的各种焦距的各种针孔直径。</p></div><div class=paragraph><p>脚本可能看起来像这样:</p></div><div class="literalblock programlisting"><div class=content><pre>#! /usr/local/bin/pinhole -b -i
+# Find the best pinhole diameter
+# for the 120 film
+
+### Standard
+80
+
+### Wide angle
+30, 40, 50, 60, 70
+
+### Telephoto
+100, 120, 140</pre></div></div><div class=paragraph><p>因为120是一个中等大小的胶片，我们可以把这个文件命名为medium。</p></div><div class=paragraph><p>我们可以设置它的执行权限，并像运行程序一样运行它:</p></div><div class=listingblock><div class=content><pre class="rouge highlight"><code data-lang=shell>% <span class=nb>chmod </span>755 medium
+% ./medium</code></pre></div></div><div class=paragraph><p>UNIX®将把最后一条命令解释为:</p></div><div class=listingblock><div class=content><pre class="rouge highlight"><code data-lang=shell>% /usr/local/bin/pinhole <span class=nt>-b</span> <span class=nt>-i</span> ./medium</code></pre></div></div><div class=paragraph><p>UNIX®将把最后一条命令解释为:</p></div><div class=listingblock><div class=content><pre class="rouge highlight"><code data-lang=shell>80	358	224	256	1562	11
+30	219	137	128	586	9
+40	253	158	181	781	10
+50	283	177	181	977	10
+60	310	194	181	1172	10
+70	335	209	181	1367	10
+100	400	250	256	1953	11
+120	438	274	256	2344	11
+140	473	296	256	2734	11</code></pre></div></div><div class=paragraph><p>现在，让我们进入:</p></div><div class=listingblock><div class=content><pre class="rouge highlight"><code data-lang=shell>% ./medium <span class=nt>-c</span></code></pre></div></div><div class=paragraph><p>UNIX®会将其处理为:</p></div><div class=listingblock><div class=content><pre class="rouge highlight"><code data-lang=shell>% /usr/local/bin/pinhole <span class=nt>-b</span> <span class=nt>-i</span> ./medium <span class=nt>-c</span></code></pre></div></div><div class=paragraph><p>这给了它两个相互冲突的选项: <code>-b</code> 和 <code>-c</code> (使用Bender的常数和Connors的常数)。我们已经对它进行了编程，以便以后的选项覆盖早期的选项——我们的程序将使用Connors的常数计算所有内容:</p></div><div class=listingblock><div class=content><pre class="rouge highlight"><code data-lang=shell>80	331	242	256	1826	11
+30	203	148	128	685	9
+40	234	171	181	913	10
+50	262	191	181	1141	10
+60	287	209	181	1370	10
+70	310	226	256	1598	11
+100	370	270	256	2283	11
+120	405	296	256	2739	11
+140	438	320	362	3196	12</code></pre></div></div><div class=paragraph><p>我们决定还是用本德常数。我们想把它的值保存为一个以逗号分隔的文件:</p></div><div class=listingblock><div class=content><pre class="rouge highlight"><code data-lang=shell>% ./medium <span class=nt>-b</span> <span class=nt>-e</span> <span class=o>&gt;</span> bender
+% <span class=nb>cat </span>bender
+focal length <span class=k>in </span>millimeters,pinhole diameter <span class=k>in </span>microns,F-number,normalized F-number,F-5.6 multiplier,stops from F-5.6
+80,358,224,256,1562,11
+30,219,137,128,586,9
+40,253,158,181,781,10
+50,283,177,181,977,10
+60,310,194,181,1172,10
+70,335,209,181,1367,10
+100,400,250,256,1953,11
+120,438,274,256,2344,11
+140,473,296,256,2734,11
+%</code></pre></div></div></div></div></div><div class=sect1><h2 id=x86-caveats>A.14. 警告<a class=anchor href=#x86-caveats></a></h2><div class=sectionbody><div class=paragraph><p>在MS-DOS®和Windows®下“长大”的汇编语言程序员往往倾向于走捷径。读取键盘扫描代码和直接写入显存是两个经典的实践例子，在MS-DOS®下不被反对，但被认为是正确的事情。</p></div><div class=paragraph><p>原因? PC BIOS和MS-DOS®在执行这些操作时都很慢。</p></div><div class=paragraph><p>您可能想在UNIX®环境中继续进行类似的实践。例如，我曾看到一个网站，它解释了如何访问一个流行的UNIX®克隆上的键盘扫描代码。</p></div><div class=paragraph><p>在UNIX®环境中，这通常是一个 <em>非常糟糕的主意</em> !让我来解释一下原因。</p></div><div class=sect2><h3 id=x86-protected>A.14.1. UNIX®保护<a class=anchor href=#x86-protected></a></h3><div class=paragraph><p>一方面，这可能根本不可能。UNIX®运行在保护模式下。只有内核和设备驱动程序被允许直接访问硬件。也许某个特定的UNIX®克隆将允许您读取键盘扫描代码，但真正的UNIX®操作系统可能不会这样做。即使一个版本允许您这样做，下一个版本可能不允许，因此您精心制作的软件可能一夜之间就会过时。</p></div></div><div class=sect2><h3 id=x86-abstraction>A.14.2. UNIX®是一个抽象<a class=anchor href=#x86-abstraction></a></h3><div class=paragraph><p>但是有一个更重要的原因不要尝试直接访问硬件(除非，当然，你正在编写一个设备驱动程序)，即使在UNIX®这样的系统上也不可以:</p></div><div class=paragraph><p><em>UNIX®是一个抽象!</em></p></div><div class=paragraph><p>在MS-DOS®和UNIX®之间的设计哲学有一个主要的区别。MS-DOS®被设计为单用户系统。它在一台电脑上运行，电脑上有一个键盘和一个视频屏幕。用户输入几乎肯定来自这个键盘。程序的输出实际上总是在那个屏幕上结束。</p></div><div class=paragraph><p>这在UNIX®中从未得到保证。对于UNIX®用户来说，管道和重定向程序输入和输出是非常常见的:</p></div><div class=listingblock><div class=content><pre class="rouge highlight"><code data-lang=shell>% program1 | program2 | program3 <span class=o>&gt;</span> file1</code></pre></div></div><div class=paragraph><p>如果你写了program2，你的输入不是来自键盘，而是来自program1的输出。类似地，您的输出不会显示在屏幕上，而是成为program3的输入，而program3的输出又会显示在 <span class=filename>file1</span> 中。</p></div><div class=paragraph><p>但还有更多!即使你确定你的输入来自终端，你的输出进入终端，也不能保证终端就是一台PC:它可能没有你所期望的显存，它的键盘也不可能产生PC风格的扫描代码。它可能是麦金塔®，或任何其他计算机。</p></div><div class=paragraph><p>现在你可能会摇头:我的软件是PC汇编语言，怎么能在Macintosh®上运行呢?但我并没有说你的软件会在Macintosh®上运行，只是说它的终端可能是Macintosh®。</p></div><div class=paragraph><p>在UNIX®下，终端不必直接连接到运行您的软件的计算机上，它甚至可以位于另一个大陆，或者，就此而言，在另一个星球上。澳大利亚的Macintosh®用户完全有可能通过telnet连接到北美(或其他任何地方)的UNIX®系统。然后该软件在一台计算机上运行，而终端在另一台计算机上:如果您试图读取扫描码，您将得到错误的输入!</p></div><div class=paragraph><p>同样的道理也适用于任何其他硬件:您正在读取的文件可能位于您无法直接访问的磁盘上。你正在阅读图像的相机可能在航天飞机上，通过卫星与你相连。</p></div><div class=paragraph><p>这就是为什么在UNIX®下，您绝对不能对数据的来源和去向做任何假设。总是让系统处理对硬件的物理访问。</p></div><div class="admonitionblock note"><table><tbody><tr><td class=icon><i class="fa icon-note" title=Note></i></td><td class=content><div class=paragraph><p>这些是警告，不是绝对的规则。例外是可能的。例如，如果文本编辑器确定它在本地机器上运行，它可能希望直接读取扫描代码以改进控制。我提到这些注意事项并不是要告诉您该做什么或不该做什么，只是要提醒您，如果您刚刚从MS-DOS®进入UNIX®，那么可能会遇到某些陷阱。当然，有创造力的人经常会打破规则，只要他们知道自己在打破规则，并且知道为什么会打破规则，这是没有关系的。</p></div></td></tr></tbody></table></div></div></div></div><div class=sect1><h2 id=x86-acknowledgements>A.15. 感谢<a class=anchor href=#x86-acknowledgements></a></h2><div class=sectionbody><div class=paragraph><p>如果没有 <a href=https://lists.FreeBSD.org/subscription/freebsd-hackers>FreeBSD技术讨论邮件列表</a>中许多有经验的FreeBSD程序员的帮助，本教程是不可能完成的，他们中的许多人都耐心地回答了我的问题，并在我试图探索UNIX®系统编程的内部工作(特别是FreeBSD)的过程中为我指明了正确的方向。</p></div><div class=paragraph><p>Thomas M. Sommers 为我打开了门。他的我 <a href=https://web.archive.org/web/20090914064615/http://www.codebreakers-journal.com/content/view/262/27>如何写“你好，世界”在FreeBSD汇编?</a> 网页是我第一次接触FreeBSD下汇编语言编程的例子。</p></div><div class=paragraph><p>Jake Burkholder愿意回答我的所有问题，并为我提供示例汇编语言源代码，从而为我敞开了大门。</p></div><div class=paragraph><p>版权所有®2000-2001 G. Adam Stanislav。保留所有权利。</p></div></div></div></div><hr><div class=last-modified><p><strong>最后修改</strong>: 2022年11月2日由 <a href="https://cgit.freebsd.org/doc/commit/?id=5821e118dd" target=_blank>Luís Henriques</a></p></div></div>
+
+</main>
+
+</body></html>
